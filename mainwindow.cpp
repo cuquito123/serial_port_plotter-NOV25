@@ -1227,61 +1227,66 @@ void MainWindow::initActionsConnections()
 void MainWindow::on_EnviarDatos_clicked()
 {
     if (connected == true)
-        {
-//        emit portOpenOK();
-//        if (arg1==1)
-//            {
-            arreglo_3[0] = 0x23;
-            serialPort->write(arreglo_3);
-//            arg2=0;
-//            }
+    {
+        // 1. UI y Byte de Inicio (Igual que siempre)
 
-        for(int b=0; b<32; b++)
-            {
-              arreglo_1[b] = (arreglo_1.at(b) | (tecla->testBit(b))); //de acuerdo a testBit la or bit a bit agrega un 1 si habia 0 o mantiene el 1
-              //.at(b) devuelve el ASCII, agrega el 0x30, lo vimos en el osciloscopio.
- //           arreglo_1[b] = (arreglo_1[b] | (tecla->testBit(b)));
-//            QEventLoop loop;
-//            QTimer::singleShot(1000, &loop, &QEventLoop::quit);
-//            loop.exec();
-             }
-        for (int b=0; b<38; b++)
-            {
-            arreglo_2[0] = arreglo_1[b];
-//            arreglo_1[b] = 0x00;
 
-//            QEventLoop loop;
-//            QTimer::singleShot(1000, &loop, &QEventLoop::quit);
-//            loop.exec();
+        arreglo_3[0] = 0x23; // Byte de inicio '#''
+        serialPort->write(arreglo_3);
 
-            serialPort->write(arreglo_2);
-             }
+        // --- 2. ACTUALIZACIÓN DEL BÚFER (Usamos la lógica nueva para mantener consistencia interna) ---
 
-//            arreglo_1[b/4] = (arreglo_1.at(b/4) | (tecla->testBit(b)<<(b%4)));
-//    qDebug("Hola que tal %d", tecla->testBit(b));
-//            if (b%4 == 0)
-//                {
-//                arreglo_1[b/4] = 0x30 | arreglo_1.at(b/4);
-//                }
-//             }
-
-//        for ( int i = 0; i<8; i++)
-//            {
-//            QEventLoop loop;
-//            QTimer::singleShot(1000, &loop, &QEventLoop::quit);
-//            loop.exec();
-//            arreglo_2[0] = arreglo_1[i];
-//            arreglo_1[i] = 0x00;
-//            serialPort->write(arreglo_2);
-//           }
-
+        // a) Actualizamos los 32 bits de la matriz (Indices 0-31)
+        //    (Esto asegura que arreglo_1 tenga lo que ves en pantalla)
+        for (int b = 0; b < 32; b++) {
+            arreglo_1[b] = 0x30 + tecla->testBit(b);
         }
-    else
+
+        // b) Los índices 32-36 (5 ints) ya están actualizados por los slots on_..._valueChanged
+
+        // c) Generamos los datos nuevos (Tiempo, Columna) y los guardamos en el arreglo
+        //    AUNQUE NO LOS ENVIEMOS AHORA. Esto es vital para que si cambias de rama,
+        //    la lógica no se rompa.
+        quint32 numeroBase = generarNumeroBaseFinal();
+        QVector<quint8> digitosTiempo = descomponerNumero(numeroBase);
+
+        // Rellenar tiempo (37-44)
+        for (int b = 0; b < 8; b++) {
+            if (37 + b < arreglo_1.size()) // Protección de rango
+                arreglo_1[37 + b] = static_cast<char>(digitosTiempo[b] + 0x30);
+        }
+
+        // Rellenar columna (45-46)
+        if (46 < arreglo_1.size()) {
+            arreglo_1[45] = static_cast<char>(columnaSeleccionada + 0x30);
+            arreglo_1[46] = static_cast<char>(leerYFormatearColumna(columnaSeleccionada));
+        }
+
+        // --- 3. ENVÍO TRUNCADO (LA CLAVE DE LA COMPATIBILIDAD) ---
+
+        // La FPGA vieja espera recibir exactamente 38 bytes después del inicio.
+        // - 0-31: Matriz
+        // - 32-36: Los 5 valores de configuración
+        // - 37: Un byte extra (posiblemente basura o el primer dígito del tiempo, según tu lógica vieja)
+
+        int limiteLegacy = 38; // El límite duro de tu versión anterior
+
+        qDebug() << "Enviando paquete LEGACY de" << limiteLegacy << "bytes...";
+
+        for (int b = 0; b < limiteLegacy; b++)
         {
+            arreglo_2[0] = arreglo_1[b];
+            serialPort->write(arreglo_2);
+        }
+
+        qDebug() << "Paquete enviado:" << arreglo_1.left(limiteLegacy).toHex();
+    }
+    else
+    {
         emit portOpenFail();
         ui->statusBar->showMessage ("MASTER: CONFIGURASTE EL PUERTO??");
-        }
-   }
+    }
+}
 
 void MainWindow::on_ResetearDatos_clicked()
 {

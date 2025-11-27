@@ -117,6 +117,7 @@ MainWindow::MainWindow (QWidget *parent) :
   m_csvFile = nullptr;
 
 
+<<<<<<< Updated upstream
   // 1. Inicialización de Variables de Estado
       // CRÍTICO: El QBitArray debe tener tamaño XX
       tecla = new QBitArray(41);
@@ -156,6 +157,23 @@ MainWindow::MainWindow (QWidget *parent) :
 
       // 4. Sincronización Inicial de la UI
       actualizarEstadoGraf(columnaSeleccionada);
+=======
+
+
+
+      // --- CONFIGURACIÓN DE TIEMPO ---
+      // Conectamos la señal de cambio de índice
+      connect(ui->TiempoBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
+              this, &MainWindow::actualizarMaximoDeTiempo);
+
+      // Inicializamos la memoria y los límites
+      indiceUnidadAnterior = ui->TiempoBox->currentIndex();
+      actualizarMaximoDeTiempo(indiceUnidadAnterior);
+
+
+
+  tecla = new QBitArray(32, false);
+>>>>>>> Stashed changes
 //  DatoCrudo = new QByteArray(16, false);
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
@@ -1339,28 +1357,195 @@ void MainWindow::on_actionconfig_toggled(bool arg2)
     }
 }
 
+
+// --- LÓGICA DE TIEMPO Y PROTOCOLO (Ajustada a 8 Dígitos) ---
+
+// 1. Slot: Gestiona límites y conversión al cambiar la unidad en la UI
+void MainWindow::actualizarMaximoDeTiempo(int nuevoIndice)
+{
+    // A. Conversión del valor actual
+    int valorActual = ui->TiempoNum->value();
+    quint32 numeroBase = convertirAUnidadBase(valorActual, indiceUnidadAnterior);
+    int nuevoValor = convertirDesdeUnidadBase(numeroBase, nuevoIndice);
+
+    // B. Definición de Límites (Regla: Máximo 8 dígitos -> 99,999,999 unidades base)
+    // 99,999,999 * 100us = 9,999 segundos (aprox 2.77 horas)
+    double nuevoMaximo;
+
+    switch (nuevoIndice) {
+        case 0: // µs
+            // El protocolo soporta hasta ~9,999,999,900 us.
+            // Pero el QSpinBox (int32) solo llega a 2,147,483,647.
+            // Usamos el límite del widget.
+            nuevoMaximo = 2147483647;
+            break;
+        case 1: // ms
+            // Max: 9,999,999 ms
+            nuevoMaximo = 9999999;
+            break;
+        case 2: // s
+            // Max: 9,999 s
+            nuevoMaximo = 9999;
+            break;
+        case 3: // min
+            // Max: 166 min (166 * 600,000 = 99,600,000 base units)
+            // (167 min se pasaría de 8 dígitos)
+            nuevoMaximo = 166;
+            break;
+        case 4: // hs (NUEVO)
+            // Max: 2 hs (2 * 36,000,000 = 72,000,000 base units)
+            // (3 hs sería 108,000,000 -> 9 dígitos -> Overflow)
+            nuevoMaximo = 2;
+            break;
+        default:
+            nuevoMaximo = 99999;
+    }
+
+    // C. Aplicar cambios
+    ui->TiempoNum->setMaximum(static_cast<int>(nuevoMaximo));
+    ui->TiempoNum->setValue(nuevoValor);
+
+    // Actualizar memoria
+    indiceUnidadAnterior = nuevoIndice;
+}
+
+// 2. Helper: Convierte UI -> Unidad Base (100 µs)
+quint32 MainWindow::convertirAUnidadBase(int valor, int indiceUnidad)
+{
+    // Usamos quint64 para el cálculo intermedio
+    quint64 calculo = 0;
+
+    switch (indiceUnidad) {
+        case 0: // µs (100us base) -> Dividir por 100
+            calculo = static_cast<quint64>(valor) / 100;
+            break;
+        case 1: // ms -> x 10
+            calculo = static_cast<quint64>(valor) * 10;
+            break;
+        case 2: // s -> x 10,000
+            calculo = static_cast<quint64>(valor) * 10000;
+            break;
+        case 3: // min -> x 600,000
+            calculo = static_cast<quint64>(valor) * 600000;
+            break;
+        case 4: // hs -> x 36,000,000
+            calculo = static_cast<quint64>(valor) * 36000000;
+            break;
+    }
+    return static_cast<quint32>(calculo);
+}
+
+// 3. Helper: Convierte Unidad Base (100 µs) -> UI
+int MainWindow::convertirDesdeUnidadBase(quint32 numeroBase, int indiceUnidad)
+{
+    // Operación inversa para la UI
+    switch (indiceUnidad) {
+        case 0: return numeroBase * 100;      // µs
+        case 1: return numeroBase / 10;       // ms
+        case 2: return numeroBase / 10000;    // s
+        case 3: return numeroBase / 600000;   // min
+        case 4: return numeroBase / 36000000; // hs
+        default: return 0;
+    }
+}
+
+// 4. Procesador Principal: Genera el número final para enviar
+quint32 MainWindow::generarNumeroBaseFinal()
+{
+    int valor = ui->TiempoNum->value();
+    int indice = ui->TiempoBox->currentIndex();
+
+    // Paso 1: Obtener valor en unidades base
+    quint32 numeroBase = convertirAUnidadBase(valor, indice);
+
+    // Paso 2: Aplicar regla de Múltiplo de 8
+    quint32 resto = numeroBase % 8;
+    if (resto != 0) {
+        qDebug() << "Redondeando número base:" << numeroBase << "a" << (numeroBase - resto);
+        numeroBase -= resto;
+    }
+
+    return numeroBase;
+}
+
+// 5. Descomponedor: Genera vector de 8 dígitos ASCII
+QVector<quint8> MainWindow::descomponerNumero(quint32 numero)
+{
+    int cantidadDeDigitos = 8; // ESTRICTAMENTE 8 DÍGITOS
+    QVector<quint8> digitos(cantidadDeDigitos, 0);
+
+    for (int i = cantidadDeDigitos - 1; i >= 0; --i) {
+        if (numero == 0) break;
+        digitos[i] = numero % 10;
+        numero /= 10;
+    }
+    return digitos;
+}
+
+// 6. Slots de actualización en tiempo real para los 5 parámetros numéricos
+void MainWindow::on_Ancho_de_pulso_valueChanged(int arg1) { arreglo_1[32] = arg1; }
+void MainWindow::on_Delay_A_valueChanged(int arg1)        { arreglo_1[33] = arg1; }
+void MainWindow::on_Delay_B_valueChanged(int arg1)        { arreglo_1[34] = arg1; }
+void MainWindow::on_Delay_C_valueChanged(int arg1)        { arreglo_1[35] = arg1; }
+void MainWindow::on_Delay_D_valueChanged(int arg1)        { arreglo_1[36] = arg1; }
+
+void MainWindow::actualizarEstadoGraf(int indiceBotonPresionado)
+{
+    // --- 1. RESETEO GENERAL ---
+
+    // Apagamos bits lógicos de columnas anteriores (32-39)
+    for (int i = 32; i <= 39; ++i) {
+        tecla->clearBit(i);
+    }
+
+    // Ponemos TODOS los botones de columna en ROJO
+    for (QPushButton* boton : botonesGraf) {
+        boton->setStyleSheet("background-color: rgb(150, 50, 50);");
+    }
+
+    // --- 2. ACTIVACIÓN ESPECÍFICA ---
+
+    // Activamos el bit lógico correspondiente
+    int bitParaActivar = 32 + indiceBotonPresionado;
+    tecla->setBit(bitParaActivar);
+
+    // Ponemos el botón presionado en VERDE
+    botonesGraf[indiceBotonPresionado]->setStyleSheet("background-color: rgb(15, 125, 15);");
+
+    // Guardamos la memoria de qué columna está activa
+    this->columnaSeleccionada = indiceBotonPresionado;
+
+    // --- 3. ACTUALIZACIÓN DEL BÚFER EN TIEMPO REAL ---
+    // (Basado en el protocolo de 47 bytes: 32 teclas + 5 nums + 8 tiempo + 2 col)
+
+    // Byte 45: Índice de la columna en ASCII (ej. '0' a '7')
+    arreglo_1[45] = static_cast<char>(indiceBotonPresionado + 0x30);
+
+    // Byte 46: Byte posicional (Estado de los botones de datos para ESTA columna)
+    // Leemos el estado actual de la columna recién seleccionada
+    quint8 bytePosicional = leerYFormatearColumna(indiceBotonPresionado);
+    arreglo_1[46] = static_cast<char>(bytePosicional);
+}
+
+
+void MainWindow::actualizarBotonDato(int bit, QPushButton* boton)
+{
+    // 1. Alternar bit y color
+    tecla->toggleBit(bit);
+
+    if (tecla->testBit(bit)) {
+        boton->setStyleSheet("background-color: rgb(15, 125, 15);"); // Verde
+    } else {
+        boton->setStyleSheet("background-color: rgb(150, 50, 50);"); // Rojo
+    }
+
+    // 2. Actualizar el búfer en tiempo real
+    // Como cambiamos un dato, el "byte posicional" de la columna actual cambió.
+    // Lo recalculamos y guardamos en la posición 46.
+    quint8 bytePosicional = leerYFormatearColumna(columnaSeleccionada);
+    arreglo_1[46] = static_cast<char>(bytePosicional);
+}
 //qDebug("Hola que tal %d", tecla->testBit(0));
-void MainWindow::on_Ancho_de_pulso_valueChanged(int arg3)
-{
-    arreglo_1[32] = arg3;
-}
-void MainWindow::on_Delay_A_valueChanged(int arg3)
-{
-    arreglo_1[33] = arg3;
-}
-void MainWindow::on_Delay_B_valueChanged(int arg3)
-{
-    arreglo_1[34] = arg3;
-}
-void MainWindow::on_Delay_C_valueChanged(int arg3)
-{
-    arreglo_1[35] = arg3;
-}
-void MainWindow::on_Delay_D_valueChanged(int arg3)
-{
-    arreglo_1[36] = arg3;
-    arreglo_1[37] = arg3;
-}
 
 
 // 1. Función para leer el estado de una columna y formatear el byte posicional

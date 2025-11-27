@@ -116,7 +116,46 @@ MainWindow::MainWindow (QWidget *parent) :
 
   m_csvFile = nullptr;
 
-  tecla = new QBitArray(32, false);
+
+  // 1. Inicialización de Variables de Estado
+      // CRÍTICO: El QBitArray debe tener tamaño XX
+      tecla = new QBitArray(41);
+      columnaSeleccionada = 0;
+
+      // Inicializar arreglo_1 con el tamaño final de 49 bytes
+      arreglo_1.resize(49);
+      arreglo_1.fill(0x30); // Relleno ASCII '0' por defecto
+
+      // 2. Configuración de Botones de Columna (GRAF)
+      botonesGraf << ui->GRAF_1 << ui->GRAF_2 << ui->GRAF_3 << ui->GRAF_4
+                  << ui->GRAF_5 << ui->GRAF_6 << ui->GRAF_7 << ui->GRAF_8;
+
+      for (int i = 0; i < botonesGraf.size(); ++i) {
+          connect(botonesGraf[i], &QPushButton::clicked, this, [=]() {
+              actualizarEstadoGraf(i); // Llama a la función con el índice de la columna
+          });
+      }
+
+      // 3. Configuración de Botones de Datos (Matriz 4x8)
+      // Orden de mapeo: 0-31 (A1_0, B1_1, C1_2, D1_3, A2_4, B2_5, etc.)
+      botonesDatos << ui->A1_0 << ui->B1_1 << ui->C1_2 << ui->D1_3
+                   << ui->A2_4 << ui->B2_5 << ui->C2_6 << ui->D2_7
+                   << ui->A3_8 << ui->B3_9 << ui->C3_10 << ui->D3_11
+                   << ui->A4_12 << ui->B4_13 << ui->C4_14 << ui->D4_15
+                   << ui->A5_16 << ui->B5_17 << ui->C5_18 << ui->D5_19
+                   << ui->A6_20 << ui->B6_21 << ui->C6_22 << ui->D6_23
+                   << ui->A7_24 << ui->B7_25 << ui->C7_26 << ui->D7_27
+                   << ui->A8_28 << ui->B8_29 << ui->C8_30 << ui->D8_31;
+
+      for (int i = 0; i < botonesDatos.size(); ++i) {
+          connect(botonesDatos[i], &QPushButton::clicked, this, [=]() {
+              // Llama a la función con el índice del bit (0-31) y el puntero al botón
+              actualizarBotonDato(i, botonesDatos[i]);
+          });
+      }
+
+      // 4. Sincronización Inicial de la UI
+      actualizarEstadoGraf(columnaSeleccionada);
 //  DatoCrudo = new QByteArray(16, false);
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
@@ -1165,436 +1204,6 @@ void MainWindow::initActionsConnections()
 //tecla.setBit(0,false);
 //}
 
-////////////////////////////////////////////Botonera//////////////////////////////////////////////////////////////////////
-
-//CANAL DE CORRELACION 1
-void MainWindow::on_A1_0_clicked()  //Button A1 manda 0x32 (decimal)
-{
-    tecla->toggleBit(0);
-    if(tecla->testBit(0))
-        {
-        ui->A1_0->setStyleSheet("background-color: rgb(15, 125, 15);");
-//        arreglo_f1[0] = 0x3f;
-//        serialPort->write(arreglo_f1);
-        }
-    else
-        {
-        ui->A1_0->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-void MainWindow::on_B1_1_clicked() //Button B1
- {
-    tecla->toggleBit(1);
-    if(tecla->testBit(1))
-        {
-        ui->B1_1->setStyleSheet("background-color: rgb(15, 125, 15);");
-//        arreglo_f1[0] = 0x3a;
-//        serialPort->write(arreglo_f1);
-        }
-    else
-        {
-        ui->B1_1->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-void MainWindow::on_C1_2_clicked() //Button C1
-{
-    tecla->toggleBit(2);
-    if(tecla->testBit(2))
-        {
-        ui->C1_2->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->C1_2->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-void MainWindow::on_D1_3_clicked() //Button D1
-{
-    tecla->toggleBit(3);
-    if(tecla->testBit(3))
-        {
-        ui->D1_3->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->D1_3->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-//CANAL DE CORRELACION 2
-void MainWindow::on_A2_4_clicked()
-{
-    tecla->toggleBit(4);
-    if(tecla->testBit(4))
-        {
-        ui->A2_4->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->A2_4->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-void MainWindow::on_B2_5_clicked()
-{
-    tecla->toggleBit(5);
-    if(tecla->testBit(5))
-        {
-        ui->B2_5->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->B2_5->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-void MainWindow::on_C2_6_clicked()
-{
-    tecla->toggleBit(6);
-    if(tecla->testBit(6))
-        {
-        ui->C2_6->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->C2_6->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-void MainWindow::on_D2_7_clicked()
-{
-    tecla->toggleBit(7);
-    if(tecla->testBit(7))
-        {
-        ui->D2_7->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->D2_7->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-//CANAL DE CORRELACION 3
-void MainWindow::on_A3_8_clicked()
-{
-    tecla->toggleBit(8);
-    if(tecla->testBit(8))
-        {
-        ui->A3_8->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->A3_8->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-void MainWindow::on_B3_9_clicked()
-{
-    tecla->toggleBit(9);
-    if(tecla->testBit(9))
-        {
-        ui->B3_9->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->B3_9->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-void MainWindow::on_C3_10_clicked()
-{
-    tecla->toggleBit(10);
-    if(tecla->testBit(10))
-        {
-        ui->C3_10->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->C3_10->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-void MainWindow::on_D3_11_clicked()
-{
-    tecla->toggleBit(11);
-    if(tecla->testBit(11))
-        {
-        ui->D3_11->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->D3_11->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-//CANAL DE CORRELACION 4
-void MainWindow::on_A4_12_clicked()
-{
-    tecla->toggleBit(12);
-    if(tecla->testBit(12))
-        {
-        ui->A4_12->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->A4_12->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-void MainWindow::on_B4_13_clicked()
-{
-    tecla->toggleBit(13);
-    if(tecla->testBit(13))
-        {
-        ui->B4_13->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->B4_13->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-
-void MainWindow::on_C4_14_clicked()
-{
-    tecla->toggleBit(14);
-    if(tecla->testBit(14))
-        {
-        ui->C4_14->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->C4_14->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-void MainWindow::on_D4_15_clicked()
-{
-    tecla->toggleBit(15);
-    if(tecla->testBit(15))
-        {
-        ui->D4_15->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->D4_15->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-//CANAL DE CORRELACION 5
-void MainWindow::on_A5_16_clicked()
-{
-    tecla->toggleBit(16);
-    if(tecla->testBit(16))
-        {
-        ui->A5_16->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->A5_16->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-void MainWindow::on_B5_17_clicked()
-{
-    tecla->toggleBit(17);
-    if(tecla->testBit(17))
-        {
-        ui->B5_17->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->B5_17->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-void MainWindow::on_C5_18_clicked()
-{
-    tecla->toggleBit(18);
-    if(tecla->testBit(18))
-        {
-        ui->C5_18->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->C5_18->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-void MainWindow::on_D5_19_clicked()
-{
-    tecla->toggleBit(19);
-    if(tecla->testBit(19))
-        {
-        ui->D5_19->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->D5_19->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-//CANAL DE CORRELACION 6
-void MainWindow::on_A6_20_clicked()
-{
-    tecla->toggleBit(20);
-    if(tecla->testBit(20))
-        {
-        ui->A6_20->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->A6_20->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-void MainWindow::on_B6_21_clicked()
-{
-    tecla->toggleBit(21);
-    if(tecla->testBit(21))
-        {
-        ui->B6_21->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->B6_21->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-void MainWindow::on_C6_22_clicked()
-{
-    tecla->toggleBit(22);
-    if(tecla->testBit(22))
-        {
-        ui->C6_22->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->C6_22->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-void MainWindow::on_D6_23_clicked()
-{
-    tecla->toggleBit(23);
-    if(tecla->testBit(23))
-        {
-        ui->D6_23->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->D6_23->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-//CANAL DE CORRELACION 7
-void MainWindow::on_A7_24_clicked()
-{
-    tecla->toggleBit(24);
-    if(tecla->testBit(24))
-        {
-        ui->A7_24->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->A7_24->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-void MainWindow::on_B7_25_clicked()
-{
-    tecla->toggleBit(25);
-    if(tecla->testBit(25))
-        {
-        ui->B7_25->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->B7_25->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-void MainWindow::on_C7_26_clicked()
-{
-    tecla->toggleBit(26);
-    if(tecla->testBit(26))
-        {
-        ui->C7_26->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->C7_26->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-void MainWindow::on_D7_27_clicked()
-{
-    tecla->toggleBit(27);
-    if(tecla->testBit(27))
-        {
-        ui->D7_27->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->D7_27->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-//CANAL DE CORRELACION 8
-void MainWindow::on_A8_28_clicked()
-{
-    tecla->toggleBit(28);
-    if(tecla->testBit(28))
-        {
-        ui->A8_28->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->A8_28->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-void MainWindow::on_B8_29_clicked()
-{
-    tecla->toggleBit(29);
-    if(tecla->testBit(29))
-        {
-        ui->B8_29->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->B8_29->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-void MainWindow::on_C8_30_clicked()
-{
-    tecla->toggleBit(30);
-    if(tecla->testBit(30))
-        {
-        ui->C8_30->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->C8_30->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
-
-void MainWindow::on_D8_31_clicked()
-{
-    tecla->toggleBit(31);
-    if(tecla->testBit(31))
-        {
-        ui->D8_31->setStyleSheet("background-color: rgb(15, 125, 15);");
-        }
-    else
-        {
-        ui->D8_31->setStyleSheet("background-color: rgb(150, 50, 50);");
-        }
-}
 
 void MainWindow::on_EnviarDatos_clicked()
 {
@@ -1754,3 +1363,47 @@ void MainWindow::on_Delay_D_valueChanged(int arg3)
 }
 
 
+// 1. Función para leer el estado de una columna y formatear el byte posicional
+quint8 MainWindow::leerYFormatearColumna(int indiceColumna)
+{
+    // Esta función está diseñada para leer el estado de las 4 filas (A, B, C, D)
+    // de una columna específica.
+    bool bA = tecla->testBit(indiceColumna * 4 + 0);
+    bool bB = tecla->testBit(indiceColumna * 4 + 1);
+    bool bC = tecla->testBit(indiceColumna * 4 + 2);
+    bool bD = tecla->testBit(indiceColumna * 4 + 3);
+
+    // Empaqueta los 4 booleanos en un único byte (0-15)
+    return (bD << 3) | (bC << 2) | (bB << 1) | (bA << 0);
+}
+
+// 2. Lógica para los botones de columna (GRAF)
+void MainWindow::actualizarEstadoGraf(int indiceBotonPresionado)
+{
+    // Reseteo visual y lógico de las columnas (bits 32-39)
+    for (int i = 32; i <= 39; ++i) tecla->clearBit(i);
+    for (QPushButton* btn : botonesGraf) btn->setStyleSheet("background-color: rgb(150, 50, 50);");
+
+    // Activación y guardado del estado
+    tecla->setBit(32 + indiceBotonPresionado);
+    botonesGraf[indiceBotonPresionado]->setStyleSheet("background-color: rgb(15, 125, 15);");
+    columnaSeleccionada = indiceBotonPresionado; // CRÍTICO: Guarda la columna seleccionada
+
+    // Actualizar el búfer de estado [Bytes 47 y 48]
+    arreglo_1[47] = static_cast<char>(indiceBotonPresionado + 0x30); // Índice de columna (ASCII)
+    arreglo_1[48] = static_cast<char>(leerYFormatearColumna(indiceBotonPresionado)); // Byte posicional
+}
+
+// 3. Lógica para los botones de datos (Matriz A1, B1, etc.)
+void MainWindow::actualizarBotonDato(int bit, QPushButton* boton)
+{
+    // Alternar el estado del bit (0-31)
+    tecla->toggleBit(bit);
+
+    // Actualizar color
+    boton->setStyleSheet(tecla->testBit(bit) ? "background-color: rgb(15, 125, 15);" : "background-color: rgb(150, 50, 50);");
+
+    // Actualizar el byte posicional [Byte 48]
+    // La columna seleccionada es necesaria para saber qué 4 bits leer
+    arreglo_1[48] = static_cast<char>(leerYFormatearColumna(columnaSeleccionada));
+}

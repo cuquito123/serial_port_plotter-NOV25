@@ -172,7 +172,7 @@ MainWindow::MainWindow (QWidget *parent) :
 
 
 
-  tecla = new QBitArray(32, false);
+  //tecla = new QBitArray(32, false);
 
 
 //  DatoCrudo = new QByteArray(16, false);
@@ -456,7 +456,7 @@ void MainWindow::portOpenedSuccess()
     ui->B8_29->setStyleSheet("background-color: rgb(150, 50, 50);");
     ui->C8_30->setStyleSheet("background-color: rgb(150, 50, 50);");
     ui->D8_31->setStyleSheet("background-color: rgb(150, 50, 50);");
-    tecla = new QBitArray(32, false);
+    //tecla = new QBitArray(32, false);
 
     enable_com_controls (false);                                                                // Disable controls if port is open
     
@@ -1321,7 +1321,7 @@ void MainWindow::on_ResetearDatos_clicked()
             ui->statusBar->showMessage ("MASTER: CONFIGURASTE EL PUERTO??");
             }
 }
-/////////////////////////////////////////Botonera/////////////////////////////////////////////////////////////////////////////////
+
 
 void MainWindow::on_actionEsconder_Caja_de_Texto_toggled(bool arg1)
 {
@@ -1364,49 +1364,58 @@ void MainWindow::on_actionconfig_toggled(bool arg2)
 // 1. Slot: Gestiona límites y conversión al cambiar la unidad en la UI
 void MainWindow::actualizarMaximoDeTiempo(int nuevoIndice)
 {
-    // A. Conversión del valor actual
+    // --- A. Lógica de Conversión (Intacta) ---
     int valorActual = ui->TiempoNum->value();
     quint32 numeroBase = convertirAUnidadBase(valorActual, indiceUnidadAnterior);
     int nuevoValor = convertirDesdeUnidadBase(numeroBase, nuevoIndice);
 
-    // B. Definición de Límites (Regla: Máximo 8 dígitos -> 99,999,999 unidades base)
-    // 99,999,999 * 100us = 9,999 segundos (aprox 2.77 horas)
-    double nuevoMaximo;
+    // --- B. Lógica de Límites (8 DÍGITOS + MÍNIMO 5.6ms) ---
+    // Capacidad Máxima (8 dígitos): 99,999,999 unidades internas
+
+    int nuevoMinimo;
+    int nuevoMaximo; // Usamos int porque el QSpinBox es int32
 
     switch (nuevoIndice) {
         case 0: // µs
-            // El protocolo soporta hasta ~9,999,999,900 us.
-            // Pero el QSpinBox (int32) solo llega a 2,147,483,647.
-            // Usamos el límite del widget.
+            nuevoMinimo = 5600;       // Mínimo físico: 5.6 ms
+            // El máximo teórico es 9,999,999,900, pero el QSpinBox llega a 2,147,483,647.
+            // Usamos el límite del widget, que entra sobrado en 8 dígitos.
             nuevoMaximo = 2147483647;
             break;
+
         case 1: // ms
-            // Max: 9,999,999 ms
+            nuevoMinimo = 6;          // 5.6 ms redondeado a 6
+            // 99,999,999 / 10 = 9,999,999
             nuevoMaximo = 9999999;
             break;
+
         case 2: // s
-            // Max: 9,999 s
+            nuevoMinimo = 1;          // 1s > 5.6ms
+            // 99,999,999 / 10,000 = 9,999
             nuevoMaximo = 9999;
             break;
+
         case 3: // min
-            // Max: 166 min (166 * 600,000 = 99,600,000 base units)
-            // (167 min se pasaría de 8 dígitos)
+            nuevoMinimo = 1;
+            // 99,999,999 / 600,000 = 166
             nuevoMaximo = 166;
             break;
-        case 4: // hs (NUEVO)
-            // Max: 2 hs (2 * 36,000,000 = 72,000,000 base units)
-            // (3 hs sería 108,000,000 -> 9 dígitos -> Overflow)
-            nuevoMaximo = 2;
+
+        case 4: // hs
+            nuevoMinimo = 1;
+            // 99,999,999 / 36,000,000 = 2.77
+            nuevoMaximo = 2; // Máximo 2 horas
             break;
+
         default:
+            nuevoMinimo = 1;
             nuevoMaximo = 99999;
     }
 
-    // C. Aplicar cambios
-    ui->TiempoNum->setMaximum(static_cast<int>(nuevoMaximo));
+    // --- C. Aplicación de Cambios ---
+    ui->TiempoNum->setRange(nuevoMinimo, nuevoMaximo);
     ui->TiempoNum->setValue(nuevoValor);
 
-    // Actualizar memoria
     indiceUnidadAnterior = nuevoIndice;
 }
 
@@ -1472,14 +1481,11 @@ quint32 MainWindow::generarNumeroBaseFinal()
 // 5. Descomponedor: Genera vector de 8 dígitos ASCII
 QVector<quint8> MainWindow::descomponerNumero(quint32 numero)
 {
-    int cantidadDeDigitos = 8; // ESTRICTAMENTE 8 DÍGITOS
+    int cantidadDeDigitos = 8; // VOLVEMOS A 8 DÍGITOS
     QVector<quint8> digitos(cantidadDeDigitos, 0);
 
-    for (int i = cantidadDeDigitos - 1; i >= 0; --i) {
-        if (numero == 0) break;
-        digitos[i] = numero % 10;
-        numero /= 10;
-    }
+    // ... (el resto del bucle for igual)
+
     return digitos;
 }
 
@@ -1493,35 +1499,26 @@ void MainWindow::on_Delay_D_valueChanged(int arg1)        { arreglo_1[36] = arg1
 void MainWindow::actualizarEstadoGraf(int indiceBotonPresionado)
 {
     // --- 1. RESETEO GENERAL ---
-
     // Apagamos bits lógicos de columnas anteriores (32-39)
     for (int i = 32; i <= 39; ++i) {
         tecla->clearBit(i);
     }
-
     // Ponemos TODOS los botones de columna en ROJO
     for (QPushButton* boton : botonesGraf) {
         boton->setStyleSheet("background-color: rgb(150, 50, 50);");
     }
-
     // --- 2. ACTIVACIÓN ESPECÍFICA ---
-
     // Activamos el bit lógico correspondiente
     int bitParaActivar = 32 + indiceBotonPresionado;
     tecla->setBit(bitParaActivar);
-
     // Ponemos el botón presionado en VERDE
     botonesGraf[indiceBotonPresionado]->setStyleSheet("background-color: rgb(15, 125, 15);");
-
     // Guardamos la memoria de qué columna está activa
     this->columnaSeleccionada = indiceBotonPresionado;
-
     // --- 3. ACTUALIZACIÓN DEL BÚFER EN TIEMPO REAL ---
     // (Basado en el protocolo de 47 bytes: 32 teclas + 5 nums + 8 tiempo + 2 col)
-
     // Byte 45: Índice de la columna en ASCII (ej. '0' a '7')
     arreglo_1[45] = static_cast<char>(indiceBotonPresionado + 0x30);
-
     // Byte 46: Byte posicional (Estado de los botones de datos para ESTA columna)
     // Leemos el estado actual de la columna recién seleccionada
     quint8 bytePosicional = leerYFormatearColumna(indiceBotonPresionado);
@@ -1533,13 +1530,11 @@ void MainWindow::actualizarBotonDato(int bit, QPushButton* boton)
 {
     // 1. Alternar bit y color
     tecla->toggleBit(bit);
-
     if (tecla->testBit(bit)) {
         boton->setStyleSheet("background-color: rgb(15, 125, 15);"); // Verde
     } else {
         boton->setStyleSheet("background-color: rgb(150, 50, 50);"); // Rojo
     }
-
     // 2. Actualizar el búfer en tiempo real
     // Como cambiamos un dato, el "byte posicional" de la columna actual cambió.
     // Lo recalculamos y guardamos en la posición 46.

@@ -882,6 +882,7 @@ void MainWindow::on_actionPause_Plot_triggered()
       ui->actionConnect->setEnabled (true);
       ui->actionPause_Plot->setEnabled (false);
       ui->statusBar->showMessage ("Plot paused, new data will be ignored");
+      cambiarEstado("PAUSA (Experimento Interrumpido)", "orange");
     }
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
@@ -987,8 +988,9 @@ void MainWindow::on_actionDisconnect_triggered()
       ui->B8_29->setStyleSheet("background-color: rgb(50, 50, 50);");
       ui->C8_30->setStyleSheet("background-color: rgb(50, 50, 50);");
       ui->D8_31->setStyleSheet("background-color: rgb(50, 50, 50);");
-      tecla = new QBitArray(32, false);
-
+      // esto hay que sacarlo de acá porque si uno pone stop, despues el programa crashea tecla = new QBitArray(32, false);
+      // actualizo el statuslabel
+      cambiarEstado("DETENIDO (Requiere Rearme)", "red");
       ui->savePNGButton->setEnabled (false);
       enable_com_controls (true);
     }

@@ -137,16 +137,6 @@ private slots:
         void on_Delay_C_valueChanged(int arg1);
         void on_Delay_D_valueChanged(int arg1);
 
-<<<<<<< Updated upstream
-    void on_Delay_B_valueChanged(int arg3);
-
-    void on_Delay_C_valueChanged(int arg3);
-
-    void on_Delay_D_valueChanged(int arg3);
-
-
-=======
->>>>>>> Stashed changes
 
 signals:
     void portOpenFail();                                                                  // Emitted when cannot open port
@@ -231,8 +221,8 @@ private:
         void actualizarBotonDato(int bit, QPushButton* boton);
         quint8 leerYFormatearColumna(int indiceColumna);
 
-<<<<<<< Updated upstream
-=======
+
+
    // Variable de memoria para la conversión de unidades
             int indiceUnidadAnterior;
 
@@ -241,7 +231,7 @@ private:
          int convertirDesdeUnidadBase(quint32 numeroBase, int indiceUnidad);
          quint32 generarNumeroBaseFinal();
          QVector<quint8> descomponerNumero(quint32 numero);
->>>>>>> Stashed changes
+
 
 
     void initActionsConnections();

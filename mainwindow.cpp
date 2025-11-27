@@ -117,7 +117,7 @@ MainWindow::MainWindow (QWidget *parent) :
   m_csvFile = nullptr;
 
 
-<<<<<<< Updated upstream
+
   // 1. Inicialización de Variables de Estado
       // CRÍTICO: El QBitArray debe tener tamaño XX
       tecla = new QBitArray(41);
@@ -157,7 +157,7 @@ MainWindow::MainWindow (QWidget *parent) :
 
       // 4. Sincronización Inicial de la UI
       actualizarEstadoGraf(columnaSeleccionada);
-=======
+
 
 
 
@@ -173,7 +173,8 @@ MainWindow::MainWindow (QWidget *parent) :
 
 
   tecla = new QBitArray(32, false);
->>>>>>> Stashed changes
+
+
 //  DatoCrudo = new QByteArray(16, false);
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */

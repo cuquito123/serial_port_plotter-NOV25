@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>840</width>
-    <height>689</height>
+    <width>921</width>
+    <height>716</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -939,7 +939,7 @@
          <rect>
           <x>10</x>
           <y>10</y>
-          <width>771</width>
+          <width>891</width>
           <height>271</height>
          </rect>
         </property>
@@ -956,34 +956,45 @@
          <property name="bottomMargin">
           <number>6</number>
          </property>
-         <item>
-          <widget class="QCustomPlot" name="plot" native="true">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="minimumSize">
-            <size>
-             <width>40</width>
-             <height>40</height>
-            </size>
-           </property>
-          </widget>
-         </item>
         </layout>
        </widget>
        <widget class="QWidget" name="verticalLayoutWidget">
         <property name="geometry">
          <rect>
-          <x>9</x>
-          <y>291</y>
-          <width>191</width>
-          <height>291</height>
+          <x>10</x>
+          <y>290</y>
+          <width>201</width>
+          <height>311</height>
          </rect>
         </property>
         <layout class="QVBoxLayout" name="verticalLayout_6">
+         <item>
+          <widget class="QComboBox" name="TiempoBox">
+           <item>
+            <property name="text">
+             <string>uS</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>mS</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>S</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Min</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+         <item>
+          <widget class="QSpinBox" name="TiempoNum"/>
+         </item>
          <item>
           <widget class="QTextEdit" name="textEdit_UartWindow">
            <property name="enabled">
@@ -1023,8 +1034,8 @@ p, li { white-space: pre-wrap; }
          <rect>
           <x>220</x>
           <y>290</y>
-          <width>561</width>
-          <height>292</height>
+          <width>664</width>
+          <height>311</height>
          </rect>
         </property>
         <layout class="QHBoxLayout" name="horizontalLayout">
@@ -1251,78 +1262,6 @@ p, li { white-space: pre-wrap; }
          </item>
          <item>
           <layout class="QGridLayout" name="gridLayout_2">
-           <item row="1" column="2">
-            <widget class="QPushButton" name="A2_4">
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
-             <property name="minimumSize">
-              <size>
-               <width>15</width>
-               <height>15</height>
-              </size>
-             </property>
-             <property name="maximumSize">
-              <size>
-               <width>500</width>
-               <height>500</height>
-              </size>
-             </property>
-             <property name="palette">
-              <palette>
-               <active>
-                <colorrole role="Button">
-                 <brush brushstyle="SolidPattern">
-                  <color alpha="255">
-                   <red>255</red>
-                   <green>255</green>
-                   <blue>255</blue>
-                  </color>
-                 </brush>
-                </colorrole>
-               </active>
-               <inactive>
-                <colorrole role="Button">
-                 <brush brushstyle="SolidPattern">
-                  <color alpha="255">
-                   <red>255</red>
-                   <green>255</green>
-                   <blue>255</blue>
-                  </color>
-                 </brush>
-                </colorrole>
-               </inactive>
-               <disabled>
-                <colorrole role="Button">
-                 <brush brushstyle="SolidPattern">
-                  <color alpha="255">
-                   <red>255</red>
-                   <green>255</green>
-                   <blue>255</blue>
-                  </color>
-                 </brush>
-                </colorrole>
-               </disabled>
-              </palette>
-             </property>
-             <property name="text">
-              <string>A2</string>
-             </property>
-             <property name="checkable">
-              <bool>true</bool>
-             </property>
-             <property name="Color apretado" stdset="0">
-              <color>
-               <red>170</red>
-               <green>0</green>
-               <blue>0</blue>
-              </color>
-             </property>
-            </widget>
-           </item>
            <item row="3" column="4">
             <widget class="QPushButton" name="C4_14">
              <property name="sizePolicy">
@@ -1358,118 +1297,6 @@ p, li { white-space: pre-wrap; }
              </property>
             </widget>
            </item>
-           <item row="1" column="0">
-            <widget class="QLabel" name="A">
-             <property name="text">
-              <string>A</string>
-             </property>
-            </widget>
-           </item>
-           <item row="3" column="2">
-            <widget class="QPushButton" name="C2_6">
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
-             <property name="minimumSize">
-              <size>
-               <width>15</width>
-               <height>15</height>
-              </size>
-             </property>
-             <property name="maximumSize">
-              <size>
-               <width>500</width>
-               <height>500</height>
-              </size>
-             </property>
-             <property name="text">
-              <string>C2</string>
-             </property>
-             <property name="checkable">
-              <bool>true</bool>
-             </property>
-             <property name="Color apretado" stdset="0">
-              <color>
-               <red>170</red>
-               <green>0</green>
-               <blue>0</blue>
-              </color>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="5">
-            <widget class="QPushButton" name="A5_16">
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
-             <property name="minimumSize">
-              <size>
-               <width>15</width>
-               <height>15</height>
-              </size>
-             </property>
-             <property name="maximumSize">
-              <size>
-               <width>500</width>
-               <height>500</height>
-              </size>
-             </property>
-             <property name="mouseTracking">
-              <bool>true</bool>
-             </property>
-             <property name="text">
-              <string>A5</string>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="5">
-            <widget class="QLabel" name="label_14">
-             <property name="text">
-              <string>5</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignCenter</set>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="0">
-            <widget class="QLabel" name="B">
-             <property name="text">
-              <string>B</string>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="7">
-            <widget class="QPushButton" name="B7_25">
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
-             <property name="minimumSize">
-              <size>
-               <width>15</width>
-               <height>15</height>
-              </size>
-             </property>
-             <property name="maximumSize">
-              <size>
-               <width>500</width>
-               <height>500</height>
-              </size>
-             </property>
-             <property name="text">
-              <string>B7</string>
-             </property>
-            </widget>
-           </item>
            <item row="1" column="4">
             <widget class="QPushButton" name="A4_12">
              <property name="sizePolicy">
@@ -1502,6 +1329,192 @@ p, li { white-space: pre-wrap; }
                <green>0</green>
                <blue>0</blue>
               </color>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="8">
+            <widget class="QPushButton" name="GRAF_8">
+             <property name="enabled">
+              <bool>true</bool>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>52</width>
+               <height>52</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>8</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="6">
+            <widget class="QPushButton" name="B6_21">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>15</width>
+               <height>15</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>500</width>
+               <height>500</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>B6</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="3">
+            <widget class="QPushButton" name="C3_10">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>15</width>
+               <height>15</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>500</width>
+               <height>500</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>C3</string>
+             </property>
+             <property name="checkable">
+              <bool>true</bool>
+             </property>
+             <property name="Color apretado" stdset="0">
+              <color>
+               <red>170</red>
+               <green>0</green>
+               <blue>0</blue>
+              </color>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="QPushButton" name="B1_1">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>15</width>
+               <height>15</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>500</width>
+               <height>500</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>B1</string>
+             </property>
+             <property name="checkable">
+              <bool>true</bool>
+             </property>
+             <property name="Color apretado" stdset="0">
+              <color>
+               <red>170</red>
+               <green>0</green>
+               <blue>0</blue>
+              </color>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="6">
+            <widget class="QPushButton" name="A6_20">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>15</width>
+               <height>15</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>500</width>
+               <height>500</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>A6</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="7">
+            <widget class="QPushButton" name="B7_25">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>15</width>
+               <height>15</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>500</width>
+               <height>500</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>B7</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="5">
+            <widget class="QPushButton" name="C5_18">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>15</width>
+               <height>15</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>500</width>
+               <height>500</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>C5</string>
              </property>
             </widget>
            </item>
@@ -1574,6 +1587,31 @@ p, li { white-space: pre-wrap; }
              </property>
             </widget>
            </item>
+           <item row="3" column="6">
+            <widget class="QPushButton" name="C6_22">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>15</width>
+               <height>15</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>500</width>
+               <height>500</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>C6</string>
+             </property>
+            </widget>
+           </item>
            <item row="2" column="3">
             <widget class="QPushButton" name="B3_9">
              <property name="sizePolicy">
@@ -1609,8 +1647,8 @@ p, li { white-space: pre-wrap; }
              </property>
             </widget>
            </item>
-           <item row="3" column="5">
-            <widget class="QPushButton" name="C5_18">
+           <item row="1" column="5">
+            <widget class="QPushButton" name="A5_16">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
                <horstretch>0</horstretch>
@@ -1629,332 +1667,27 @@ p, li { white-space: pre-wrap; }
                <height>500</height>
               </size>
              </property>
-             <property name="text">
-              <string>C5</string>
-             </property>
-            </widget>
-           </item>
-           <item row="4" column="1">
-            <widget class="QPushButton" name="D1_3">
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
-             <property name="minimumSize">
-              <size>
-               <width>30</width>
-               <height>30</height>
-              </size>
-             </property>
-             <property name="maximumSize">
-              <size>
-               <width>500</width>
-               <height>500</height>
-              </size>
-             </property>
-             <property name="text">
-              <string>D1</string>
-             </property>
-             <property name="checkable">
+             <property name="mouseTracking">
               <bool>true</bool>
              </property>
-             <property name="Color apretado" stdset="0">
-              <color>
-               <red>170</red>
-               <green>0</green>
-               <blue>0</blue>
-              </color>
-             </property>
-            </widget>
-           </item>
-           <item row="3" column="3">
-            <widget class="QPushButton" name="C3_10">
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
-             <property name="minimumSize">
-              <size>
-               <width>15</width>
-               <height>15</height>
-              </size>
-             </property>
-             <property name="maximumSize">
-              <size>
-               <width>500</width>
-               <height>500</height>
-              </size>
-             </property>
              <property name="text">
-              <string>C3</string>
-             </property>
-             <property name="checkable">
-              <bool>true</bool>
-             </property>
-             <property name="Color apretado" stdset="0">
-              <color>
-               <red>170</red>
-               <green>0</green>
-               <blue>0</blue>
-              </color>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="4">
-            <widget class="QPushButton" name="B4_13">
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
-             <property name="minimumSize">
-              <size>
-               <width>15</width>
-               <height>15</height>
-              </size>
-             </property>
-             <property name="maximumSize">
-              <size>
-               <width>500</width>
-               <height>500</height>
-              </size>
-             </property>
-             <property name="text">
-              <string>B4</string>
-             </property>
-             <property name="checkable">
-              <bool>true</bool>
-             </property>
-             <property name="Color apretado" stdset="0">
-              <color>
-               <red>170</red>
-               <green>0</green>
-               <blue>0</blue>
-              </color>
+              <string>A5</string>
              </property>
             </widget>
            </item>
            <item row="0" column="7">
-            <widget class="QLabel" name="label_16">
-             <property name="text">
-              <string>7</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignCenter</set>
-             </property>
-            </widget>
-           </item>
-           <item row="4" column="0">
-            <widget class="QLabel" name="D">
-             <property name="text">
-              <string>D</string>
-             </property>
-            </widget>
-           </item>
-           <item row="4" column="8">
-            <widget class="QPushButton" name="D8_31">
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
-             <property name="minimumSize">
-              <size>
-               <width>30</width>
-               <height>30</height>
-              </size>
-             </property>
-             <property name="maximumSize">
-              <size>
-               <width>500</width>
-               <height>500</height>
-              </size>
-             </property>
-             <property name="text">
-              <string>D8</string>
-             </property>
-            </widget>
-           </item>
-           <item row="3" column="8">
-            <widget class="QPushButton" name="C8_30">
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
-             <property name="minimumSize">
-              <size>
-               <width>15</width>
-               <height>15</height>
-              </size>
-             </property>
-             <property name="maximumSize">
-              <size>
-               <width>500</width>
-               <height>500</height>
-              </size>
-             </property>
-             <property name="text">
-              <string>C8</string>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="3">
-            <widget class="QPushButton" name="A3_8">
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
-             <property name="minimumSize">
-              <size>
-               <width>15</width>
-               <height>15</height>
-              </size>
-             </property>
-             <property name="maximumSize">
-              <size>
-               <width>500</width>
-               <height>500</height>
-              </size>
-             </property>
-             <property name="text">
-              <string>A3</string>
-             </property>
-             <property name="checkable">
-              <bool>true</bool>
-             </property>
-             <property name="Color apretado" stdset="0">
-              <color>
-               <red>170</red>
-               <green>0</green>
-               <blue>0</blue>
-              </color>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="1">
-            <widget class="QPushButton" name="B1_1">
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
-             <property name="minimumSize">
-              <size>
-               <width>15</width>
-               <height>15</height>
-              </size>
-             </property>
-             <property name="maximumSize">
-              <size>
-               <width>500</width>
-               <height>500</height>
-              </size>
-             </property>
-             <property name="text">
-              <string>B1</string>
-             </property>
-             <property name="checkable">
-              <bool>true</bool>
-             </property>
-             <property name="Color apretado" stdset="0">
-              <color>
-               <red>170</red>
-               <green>0</green>
-               <blue>0</blue>
-              </color>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="8">
-            <widget class="QLabel" name="label_17">
-             <property name="text">
-              <string>8</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignCenter</set>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="1">
-            <widget class="QLabel" name="label_10">
-             <property name="text">
-              <string>1</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignCenter</set>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="6">
-            <widget class="QPushButton" name="B6_21">
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
-             <property name="minimumSize">
-              <size>
-               <width>15</width>
-               <height>15</height>
-              </size>
-             </property>
-             <property name="maximumSize">
-              <size>
-               <width>500</width>
-               <height>500</height>
-              </size>
-             </property>
-             <property name="text">
-              <string>B6</string>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="8">
-            <widget class="QPushButton" name="A8_28">
+            <widget class="QPushButton" name="GRAF_7">
              <property name="enabled">
               <bool>true</bool>
              </property>
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>52</width>
+               <height>52</height>
               </size>
-             </property>
-             <property name="maximumSize">
-              <size>
-               <width>500</width>
-               <height>500</height>
-              </size>
-             </property>
-             <property name="styleSheet">
-              <string notr="true"/>
              </property>
              <property name="text">
-              <string>A8</string>
-             </property>
-             <property name="checkable">
-              <bool>true</bool>
-             </property>
-             <property name="checked">
-              <bool>false</bool>
+              <string>7</string>
              </property>
             </widget>
            </item>
@@ -1983,38 +1716,10 @@ p, li { white-space: pre-wrap; }
              </property>
             </widget>
            </item>
-           <item row="0" column="3">
-            <widget class="QLabel" name="label_12">
+           <item row="3" column="0">
+            <widget class="QLabel" name="C">
              <property name="text">
-              <string>3</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignCenter</set>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="8">
-            <widget class="QPushButton" name="B8_29">
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
-             <property name="minimumSize">
-              <size>
-               <width>15</width>
-               <height>15</height>
-              </size>
-             </property>
-             <property name="maximumSize">
-              <size>
-               <width>500</width>
-               <height>500</height>
-              </size>
-             </property>
-             <property name="text">
-              <string>B8</string>
+              <string>C</string>
              </property>
             </widget>
            </item>
@@ -2053,40 +1758,6 @@ p, li { white-space: pre-wrap; }
              </property>
             </widget>
            </item>
-           <item row="1" column="7">
-            <widget class="QPushButton" name="A7_24">
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
-             <property name="minimumSize">
-              <size>
-               <width>15</width>
-               <height>15</height>
-              </size>
-             </property>
-             <property name="maximumSize">
-              <size>
-               <width>500</width>
-               <height>500</height>
-              </size>
-             </property>
-             <property name="styleSheet">
-              <string notr="true"/>
-             </property>
-             <property name="text">
-              <string>A7</string>
-             </property>
-             <property name="checkable">
-              <bool>false</bool>
-             </property>
-             <property name="checked">
-              <bool>false</bool>
-             </property>
-            </widget>
-           </item>
            <item row="2" column="2">
             <widget class="QPushButton" name="B2_5">
              <property name="sizePolicy">
@@ -2122,8 +1793,8 @@ p, li { white-space: pre-wrap; }
              </property>
             </widget>
            </item>
-           <item row="3" column="7">
-            <widget class="QPushButton" name="C7_26">
+           <item row="3" column="8">
+            <widget class="QPushButton" name="C8_30">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
                <horstretch>0</horstretch>
@@ -2143,39 +1814,14 @@ p, li { white-space: pre-wrap; }
               </size>
              </property>
              <property name="text">
-              <string>C7</string>
+              <string>C8</string>
              </property>
             </widget>
            </item>
-           <item row="3" column="0">
-            <widget class="QLabel" name="C">
+           <item row="1" column="0">
+            <widget class="QLabel" name="A">
              <property name="text">
-              <string>C</string>
-             </property>
-            </widget>
-           </item>
-           <item row="3" column="6">
-            <widget class="QPushButton" name="C6_22">
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
-             <property name="minimumSize">
-              <size>
-               <width>15</width>
-               <height>15</height>
-              </size>
-             </property>
-             <property name="maximumSize">
-              <size>
-               <width>500</width>
-               <height>500</height>
-              </size>
-             </property>
-             <property name="text">
-              <string>C6</string>
+              <string>A</string>
              </property>
             </widget>
            </item>
@@ -2242,8 +1888,8 @@ p, li { white-space: pre-wrap; }
              </property>
             </widget>
            </item>
-           <item row="4" column="7">
-            <widget class="QPushButton" name="D7_27">
+           <item row="1" column="2">
+            <widget class="QPushButton" name="A2_4">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
                <horstretch>0</horstretch>
@@ -2252,8 +1898,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>30</width>
-               <height>30</height>
+               <width>15</width>
+               <height>15</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -2262,28 +1908,121 @@ p, li { white-space: pre-wrap; }
                <height>500</height>
               </size>
              </property>
+             <property name="palette">
+              <palette>
+               <active>
+                <colorrole role="Button">
+                 <brush brushstyle="SolidPattern">
+                  <color alpha="255">
+                   <red>255</red>
+                   <green>255</green>
+                   <blue>255</blue>
+                  </color>
+                 </brush>
+                </colorrole>
+               </active>
+               <inactive>
+                <colorrole role="Button">
+                 <brush brushstyle="SolidPattern">
+                  <color alpha="255">
+                   <red>255</red>
+                   <green>255</green>
+                   <blue>255</blue>
+                  </color>
+                 </brush>
+                </colorrole>
+               </inactive>
+               <disabled>
+                <colorrole role="Button">
+                 <brush brushstyle="SolidPattern">
+                  <color alpha="255">
+                   <red>255</red>
+                   <green>255</green>
+                   <blue>255</blue>
+                  </color>
+                 </brush>
+                </colorrole>
+               </disabled>
+              </palette>
+             </property>
              <property name="text">
-              <string>D7</string>
+              <string>A2</string>
+             </property>
+             <property name="checkable">
+              <bool>true</bool>
+             </property>
+             <property name="Color apretado" stdset="0">
+              <color>
+               <red>170</red>
+               <green>0</green>
+               <blue>0</blue>
+              </color>
              </property>
             </widget>
            </item>
-           <item row="0" column="6">
-            <widget class="QLabel" name="label_15">
-             <property name="text">
-              <string>6</string>
+           <item row="1" column="7">
+            <widget class="QPushButton" name="A7_24">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
              </property>
-             <property name="alignment">
-              <set>Qt::AlignCenter</set>
+             <property name="minimumSize">
+              <size>
+               <width>15</width>
+               <height>15</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>500</width>
+               <height>500</height>
+              </size>
+             </property>
+             <property name="styleSheet">
+              <string notr="true"/>
+             </property>
+             <property name="text">
+              <string>A7</string>
+             </property>
+             <property name="checkable">
+              <bool>false</bool>
+             </property>
+             <property name="checked">
+              <bool>false</bool>
              </property>
             </widget>
            </item>
-           <item row="0" column="4">
-            <widget class="QLabel" name="label_13">
-             <property name="text">
-              <string>4</string>
+           <item row="0" column="3">
+            <widget class="QPushButton" name="GRAF_3">
+             <property name="enabled">
+              <bool>true</bool>
              </property>
-             <property name="alignment">
-              <set>Qt::AlignCenter</set>
+             <property name="minimumSize">
+              <size>
+               <width>52</width>
+               <height>52</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>3</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QPushButton" name="GRAF_1">
+             <property name="enabled">
+              <bool>true</bool>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>52</width>
+               <height>52</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>1</string>
              </property>
             </widget>
            </item>
@@ -2322,8 +2061,24 @@ p, li { white-space: pre-wrap; }
              </property>
             </widget>
            </item>
-           <item row="1" column="6">
-            <widget class="QPushButton" name="A6_20">
+           <item row="0" column="4">
+            <widget class="QPushButton" name="GRAF_4">
+             <property name="enabled">
+              <bool>true</bool>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>52</width>
+               <height>52</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>4</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="7">
+            <widget class="QPushButton" name="C7_26">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
                <horstretch>0</horstretch>
@@ -2343,7 +2098,176 @@ p, li { white-space: pre-wrap; }
               </size>
              </property>
              <property name="text">
-              <string>A6</string>
+              <string>C7</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="2">
+            <widget class="QPushButton" name="C2_6">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>15</width>
+               <height>15</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>500</width>
+               <height>500</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>C2</string>
+             </property>
+             <property name="checkable">
+              <bool>true</bool>
+             </property>
+             <property name="Color apretado" stdset="0">
+              <color>
+               <red>170</red>
+               <green>0</green>
+               <blue>0</blue>
+              </color>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="7">
+            <widget class="QPushButton" name="D7_27">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>30</width>
+               <height>30</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>500</width>
+               <height>500</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>D7</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="B">
+             <property name="text">
+              <string>B</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="5">
+            <widget class="QPushButton" name="GRAF_5">
+             <property name="enabled">
+              <bool>true</bool>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>52</width>
+               <height>52</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>5</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="2">
+            <widget class="QPushButton" name="GRAF_2">
+             <property name="enabled">
+              <bool>true</bool>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>52</width>
+               <height>52</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>2</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="3">
+            <widget class="QPushButton" name="A3_8">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>15</width>
+               <height>15</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>500</width>
+               <height>500</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>A3</string>
+             </property>
+             <property name="checkable">
+              <bool>true</bool>
+             </property>
+             <property name="Color apretado" stdset="0">
+              <color>
+               <red>170</red>
+               <green>0</green>
+               <blue>0</blue>
+              </color>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="1">
+            <widget class="QPushButton" name="D1_3">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>30</width>
+               <height>30</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>500</width>
+               <height>500</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>D1</string>
+             </property>
+             <property name="checkable">
+              <bool>true</bool>
+             </property>
+             <property name="Color apretado" stdset="0">
+              <color>
+               <red>170</red>
+               <green>0</green>
+               <blue>0</blue>
+              </color>
              </property>
             </widget>
            </item>
@@ -2372,19 +2296,176 @@ p, li { white-space: pre-wrap; }
              </property>
             </widget>
            </item>
-           <item row="0" column="2">
-            <widget class="QLabel" name="label_11">
-             <property name="text">
-              <string>2</string>
+           <item row="2" column="8">
+            <widget class="QPushButton" name="B8_29">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
              </property>
-             <property name="alignment">
-              <set>Qt::AlignCenter</set>
+             <property name="minimumSize">
+              <size>
+               <width>15</width>
+               <height>15</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>500</width>
+               <height>500</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>B8</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="0">
+            <widget class="QLabel" name="D">
+             <property name="text">
+              <string>D</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="8">
+            <widget class="QPushButton" name="D8_31">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>30</width>
+               <height>30</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>500</width>
+               <height>500</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>D8</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="8">
+            <widget class="QPushButton" name="A8_28">
+             <property name="enabled">
+              <bool>true</bool>
+             </property>
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>15</width>
+               <height>15</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>500</width>
+               <height>500</height>
+              </size>
+             </property>
+             <property name="styleSheet">
+              <string notr="true"/>
+             </property>
+             <property name="text">
+              <string>A8</string>
+             </property>
+             <property name="checkable">
+              <bool>true</bool>
+             </property>
+             <property name="checked">
+              <bool>false</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="6">
+            <widget class="QPushButton" name="GRAF_6">
+             <property name="enabled">
+              <bool>true</bool>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>52</width>
+               <height>52</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>6</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="4">
+            <widget class="QPushButton" name="B4_13">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>15</width>
+               <height>15</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>500</width>
+               <height>500</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>B4</string>
+             </property>
+             <property name="checkable">
+              <bool>true</bool>
+             </property>
+             <property name="Color apretado" stdset="0">
+              <color>
+               <red>170</red>
+               <green>0</green>
+               <blue>0</blue>
+              </color>
              </property>
             </widget>
            </item>
           </layout>
          </item>
         </layout>
+       </widget>
+       <widget class="QCustomPlot" name="plot" native="true">
+        <property name="geometry">
+         <rect>
+          <x>40</x>
+          <y>20</y>
+          <width>851</width>
+          <height>259</height>
+         </rect>
+        </property>
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>40</width>
+          <height>40</height>
+         </size>
+        </property>
        </widget>
       </widget>
      </widget>
@@ -2438,8 +2519,8 @@ p, li { white-space: pre-wrap; }
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>840</width>
-     <height>20</height>
+     <width>921</width>
+     <height>21</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuConfiguraci_n_del_texto">

@@ -122,69 +122,6 @@ private slots:
 
 //    void on_actionconfig_triggered();
 
-    void on_A1_0_clicked();
-
-    void on_B1_1_clicked();
-
-    void on_C1_2_clicked();
-
-    void on_D1_3_clicked();
-
-    void on_A2_4_clicked();
-
-    void on_B2_5_clicked();
-
-    void on_C2_6_clicked();
-
-    void on_D2_7_clicked();
-
-    void on_A3_8_clicked();
-
-    void on_B3_9_clicked();
-
-    void on_C3_10_clicked();
-
-    void on_D3_11_clicked();
-
-    void on_A4_12_clicked();
-
-    void on_B4_13_clicked();
-
-    void on_C4_14_clicked();
-
-    void on_D4_15_clicked();
-
-    void on_A5_16_clicked();
-
-    void on_B5_17_clicked();
-
-    void on_C5_18_clicked();
-
-    void on_D5_19_clicked();
-
-    void on_A6_20_clicked();
-
-    void on_B6_21_clicked();
-
-    void on_C6_22_clicked();
-
-    void on_D6_23_clicked();
-
-    void on_A7_24_clicked();
-
-    void on_B7_25_clicked();
-
-    void on_C7_26_clicked();
-
-    void on_D7_27_clicked();
-
-    void on_A8_28_clicked();
-
-    void on_B8_29_clicked();
-
-    void on_C8_30_clicked();
-
-    void on_D8_31_clicked();
 
     void on_EnviarDatos_clicked();
 
@@ -200,13 +137,7 @@ private slots:
 
     void on_Delay_D_valueChanged(int arg3);
 
-    void on_plot_customContextMenuRequested(const QPoint &pos);
 
-    void on_textEdit_UartWindow_customContextMenuRequested(const QPoint &pos);
-
-    void on_textEdit_UartWindow_copyAvailable(bool b);
-
-    void on_Delay_A_textChanged(const QString &arg1);
 
 signals:
     void portOpenFail();                                                                  // Emitted when cannot open port
@@ -278,6 +209,21 @@ private:
 //    QByteArray señal_envio = QByteArray(1, false);                                          // Signal de comienzo de envio de datos
     QBitArray *tecla;
      //char  *temp=nullptr;
+
+    // Vectores para manejo de botones (para las conexiones con lambdas)
+        QVector<QPushButton*> botonesGraf;
+        QVector<QPushButton*> botonesDatos;
+    // Estado del sistema
+        int columnaSeleccionada;
+
+
+   // --- DECLARACIONES DE FUNCIONES LÓGICAS ---
+        void actualizarEstadoGraf(int indiceBotonPresionado);
+        void actualizarBotonDato(int bit, QPushButton* boton);
+        quint8 leerYFormatearColumna(int indiceColumna);
+
+
+
     void initActionsConnections();
     QSerialPort *m_serial = nullptr;
 

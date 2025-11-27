@@ -136,7 +136,8 @@ private slots:
         void on_Delay_B_valueChanged(int arg1);
         void on_Delay_C_valueChanged(int arg1);
         void on_Delay_D_valueChanged(int arg1);
-
+    //funcion para el StatusLabel
+        void cambiarEstado(QString texto, QString color);
 
 signals:
     void portOpenFail();                                                                  // Emitted when cannot open port
@@ -146,6 +147,9 @@ signals:
 
 private:
     Ui::MainWindow *ui;
+
+    /* Indicador de estado */
+    QLabel *statusLabel;
 
     /* Line colors */
     QColor line_colors[CUSTOM_LINE_COLORS];

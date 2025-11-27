@@ -116,7 +116,13 @@ MainWindow::MainWindow (QWidget *parent) :
 
   m_csvFile = nullptr;
 
+  // --- CONFIGURACIÓN DEL STATUS LABEL
+      statusLabel = new QLabel(this);
+      statusLabel->setText("Listo"); // Texto inicial
+      statusLabel->setMinimumWidth(100); // Para que no baile la interfaz
 
+      // Lo agregamos a la barra de estado permanentemente
+      ui->statusBar->addPermanentWidget(statusLabel);
 
   // 1. Inicialización de Variables de Estado
       // CRÍTICO: El QBitArray debe tener tamaño XX
@@ -1228,6 +1234,7 @@ void MainWindow::on_EnviarDatos_clicked()
 {
     if (connected == true)
     {
+        cambiarEstado("Enviando...", "green");
         // 1. UI y Byte de Inicio (Igual que siempre)
 
 
@@ -1285,6 +1292,7 @@ void MainWindow::on_EnviarDatos_clicked()
     {
         emit portOpenFail();
         ui->statusBar->showMessage ("MASTER: CONFIGURASTE EL PUERTO??");
+        cambiarEstado("Error: Desconectado", "red");
     }
 }
 
@@ -1292,6 +1300,7 @@ void MainWindow::on_ResetearDatos_clicked()
 {
     if (connected == true)
         {
+        cambiarEstado("Esperando...", "black");
 //         if (arg2 == 0)
 //            {
             arreglo_3[0] = 0x5F;
@@ -1564,3 +1573,10 @@ quint8 MainWindow::leerYFormatearColumna(int indiceColumna)
 }
 
 // 2. Lógica para los botones de columna (GRAF)
+
+void MainWindow::cambiarEstado(QString texto, QString color)
+{
+    statusLabel->setText(texto);
+    // Usamos CSS simple para el color y negrita
+    statusLabel->setStyleSheet("color: " + color + "; font-weight: bold;");
+}

@@ -1563,32 +1563,3 @@ quint8 MainWindow::leerYFormatearColumna(int indiceColumna)
 }
 
 // 2. Lógica para los botones de columna (GRAF)
-void MainWindow::actualizarEstadoGraf(int indiceBotonPresionado)
-{
-    // Reseteo visual y lógico de las columnas (bits 32-39)
-    for (int i = 32; i <= 39; ++i) tecla->clearBit(i);
-    for (QPushButton* btn : botonesGraf) btn->setStyleSheet("background-color: rgb(150, 50, 50);");
-
-    // Activación y guardado del estado
-    tecla->setBit(32 + indiceBotonPresionado);
-    botonesGraf[indiceBotonPresionado]->setStyleSheet("background-color: rgb(15, 125, 15);");
-    columnaSeleccionada = indiceBotonPresionado; // CRÍTICO: Guarda la columna seleccionada
-
-    // Actualizar el búfer de estado [Bytes 47 y 48]
-    arreglo_1[47] = static_cast<char>(indiceBotonPresionado + 0x30); // Índice de columna (ASCII)
-    arreglo_1[48] = static_cast<char>(leerYFormatearColumna(indiceBotonPresionado)); // Byte posicional
-}
-
-// 3. Lógica para los botones de datos (Matriz A1, B1, etc.)
-void MainWindow::actualizarBotonDato(int bit, QPushButton* boton)
-{
-    // Alternar el estado del bit (0-31)
-    tecla->toggleBit(bit);
-
-    // Actualizar color
-    boton->setStyleSheet(tecla->testBit(bit) ? "background-color: rgb(15, 125, 15);" : "background-color: rgb(150, 50, 50);");
-
-    // Actualizar el byte posicional [Byte 48]
-    // La columna seleccionada es necesaria para saber qué 4 bits leer
-    arreglo_1[48] = static_cast<char>(leerYFormatearColumna(columnaSeleccionada));
-}

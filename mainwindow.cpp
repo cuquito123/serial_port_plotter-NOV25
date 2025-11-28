@@ -1236,68 +1236,50 @@ void MainWindow::on_EnviarDatos_clicked()
 {
     if (connected == true)
     {
-        cambiarEstado("Enviando...", "green");
-        // 1. UI y Byte de Inicio (Igual que siempre)
+        // 1. UI
+        cambiarEstado("Enviando (Híbrido)...", "green");
 
-
-        arreglo_3[0] = 0x23; // Byte de inicio '#''
+        // 2. Inicio
+        arreglo_3[0] = 0x23;
         serialPort->write(arreglo_3);
 
-        // --- 2. ACTUALIZACIÓN DEL BÚFER (Usamos la lógica nueva para mantener consistencia interna) ---
-
-        // a) Actualizamos los 32 bits de la matriz (Indices 0-31)
-        //    (Esto asegura que arreglo_1 tenga lo que ves en pantalla)
-        for (int b = 0; b < 32; b++) {
-            arreglo_1[b] = 0x30 + tecla->testBit(b);
+        // --- BUCLE 1: MATRIZ (BINARIO PURO) ---
+        // Esto arregla los LEDs. Enviamos 0 o 1 directo.
+        for(int b = 0; b < 32; b++)
+        {
+            if (tecla->testBit(b)) {
+                arreglo_1[b] = 0x01; // Encendido
+            } else {
+                arreglo_1[b] = 0x00; // Apagado (LEDs apagados)
+            }
         }
 
-        // b) Los índices 32-36 (5 ints) ya están actualizados por los slots on_..._valueChanged
+        // --- ZONA DE CONFIGURACIÓN (32-37) ---
+        // NO TOCAMOS NADA AQUÍ.
+        // Confiamos en que tus slots (on_Ancho_de_pulso_valueChanged, etc.)
+        // ya escribieron el valor correcto en arreglo_1[32]...[36].
+        // Si el SpinBox puso un 5, enviamos 0x05.
 
-        // c) Generamos los datos nuevos (Tiempo, Columna) y los guardamos en el arreglo
-        //    AUNQUE NO LOS ENVIEMOS AHORA. Esto es vital para que si cambias de rama,
-        //    la lógica no se rompa.
-        quint32 numeroBase = generarNumeroBaseFinal();
-        QVector<quint8> digitosTiempo = descomponerNumero(numeroBase);
-
-        // Rellenar tiempo (37-44)
-        for (int b = 0; b < 8; b++) {
-            if (37 + b < arreglo_1.size()) // Protección de rango
-                arreglo_1[37 + b] = static_cast<char>(digitosTiempo[b] + 0x30);
-        }
-
-        // Rellenar columna (45-46)
-        if (46 < arreglo_1.size()) {
-            arreglo_1[45] = static_cast<char>(columnaSeleccionada + 0x30);
-            arreglo_1[46] = static_cast<char>(leerYFormatearColumna(columnaSeleccionada));
-        }
-
-        // --- 3. ENVÍO TRUNCADO (LA CLAVE DE LA COMPATIBILIDAD) ---
-
-        // La FPGA vieja espera recibir exactamente 38 bytes después del inicio.
-        // - 0-31: Matriz
-        // - 32-36: Los 5 valores de configuración
-        // - 37: Un byte extra (posiblemente basura o el primer dígito del tiempo, según tu lógica vieja)
-
-        int limiteLegacy = 38; // El límite duro de tu versión anterior
-
-        qDebug() << "Enviando paquete LEGACY de" << limiteLegacy << "bytes...";
-
-        for (int b = 0; b < limiteLegacy; b++)
+        // --- BUCLE 2: ENVÍO (38 BYTES) ---
+        for (int b = 0; b < 38; b++)
         {
             arreglo_2[0] = arreglo_1[b];
             serialPort->write(arreglo_2);
         }
 
-        qDebug() << "Paquete enviado:" << arreglo_1.left(limiteLegacy).toHex();
+        // Debug: Verifica que veas "0001..." al principio y tus valores (ej "05") al final.
+        qDebug() << "Paquete Híbrido Enviado:" << arreglo_1.left(38).toHex();
+
+        // (Opcional) Restaurar estado
+        // cambiarEstado("Listo", "black");
     }
     else
     {
         emit portOpenFail();
-        ui->statusBar->showMessage ("MASTER: CONFIGURASTE EL PUERTO??");
-        cambiarEstado("Error: Desconectado", "red");
+        cambiarEstado("ERROR: Desconectado", "red");
+        ui->statusBar->showMessage("MASTER: CONFIGURASTE EL PUERTO??");
     }
 }
-
 void MainWindow::on_ResetearDatos_clicked()
 {
     if (connected == true)

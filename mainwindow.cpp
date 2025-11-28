@@ -936,63 +936,35 @@ void MainWindow::on_actionDisconnect_triggered()
 {
   if (connected)
     {
-      serialPort->close();                                                              // Close serial port
-      emit portClosed();                                                                // Notify application
-      delete serialPort;                                                                // Delete the pointer
+      // --- 1. Lógica de Desconexión (Tu código original) ---
+      serialPort->close();
+      emit portClosed();
+      delete serialPort;
+      serialPort = nullptr; // Dangling pointer fix
 
       enviar = false;
+      connected = false;
+      plotting = false;
 
-      serialPort = nullptr;                                                                // Assign NULL to dangling pointer
+      // --- 2. Actualización de UI (Botones de control) ---
+      ui->actionConnect->setEnabled(true);
+      ui->actionPause_Plot->setEnabled(false);
+      ui->actionDisconnect->setEnabled(false);
+      ui->savePNGButton->setEnabled(false);
+      enable_com_controls(true);
 
-      ui->statusBar->showMessage ("Disconnected!");
-
-      connected = false;                                                                // Set connected status flag to false
-      ui->actionConnect->setEnabled (true);
-
-      plotting = false;                                                                 // Not plotting anymore
-      ui->actionPause_Plot->setEnabled (false);
-      ui->actionDisconnect->setEnabled (false);
-//      ui->actionRecord_stream->setEnabled(true);
-      receivedData.clear();                                                           // Clear received string
+      // --- 3. Limpieza de Datos ---
+      receivedData.clear();
       ui->textEdit_UartWindow->append(receivedData);
 
-      ui->A1_0->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->B1_1->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->C1_2->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->D1_3->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->A2_4->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->B2_5->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->C2_6->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->D2_7->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->A3_8->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->B3_9->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->C3_10->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->D3_11->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->A4_12->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->B4_13->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->C4_14->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->D4_15->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->A5_16->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->B5_17->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->C5_18->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->D5_19->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->A6_20->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->B6_21->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->C6_22->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->D6_23->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->A7_24->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->B7_25->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->C7_26->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->D7_27->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->A8_28->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->B8_29->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->C8_30->setStyleSheet("background-color: rgb(50, 50, 50);");
-      ui->D8_31->setStyleSheet("background-color: rgb(50, 50, 50);");
-      // esto hay que sacarlo de acá porque si uno pone stop, despues el programa crashea tecla = new QBitArray(32, false);
-      // actualizo el statuslabel
+      // --- 4. RESETEO DE MATRIZ Y BOTONES (La Optimización) ---
+      // Reemplaza las 32 líneas de setStyleSheet manuales.
+      // Esta función pone todo en rojo y limpia el QBitArray 'tecla'.
+      limpiarMatrizInterna();
+
+      // --- 5. Estado Visual Final ---
+      ui->statusBar->showMessage("Disconnected!");
       cambiarEstado("DETENIDO (Requiere Rearme)", "red");
-      ui->savePNGButton->setEnabled (false);
-      enable_com_controls (true);
     }
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
@@ -1283,43 +1255,52 @@ void MainWindow::on_EnviarDatos_clicked()
 void MainWindow::on_ResetearDatos_clicked()
 {
     if (connected == true)
+    {
+        // 1. Feedback Visual (Agregado seguro)
+        cambiarEstado("RESETEANDO...", "orange");
+
+        // 2. Enviar el comando de Reset a la FPGA (Tu lógica original)
+        arreglo_3[0] = 0x5F;
+        serialPort->write(arreglo_3);
+
+        emit portOpenOK();
+
+        // 3. Limpieza de Consola (Tu lógica original)
+        // receivedData.clear(); // (Estaba comentado en tu original)
+        ui->textEdit_UartWindow->clear();
+        ui->textEdit_UartWindow->append(receivedData);
+
+        // --- AGREGADO SEGURO: Actualización Visual de Botones ---
+        // Llamamos a esto SOLO para poner los botones en ROJO y limpiar 'tecla'.
+        // No confiamos en que esto limpie arreglo_1, lo haremos manualmente abajo
+        // para respetar tu lógica original al 100%.
+        limpiarMatrizInterna();
+
+        // 4. Limpieza de Datos para Envío (Tu bucle original)
+        // Ponemos ceros explícitamente en los primeros 32 bytes.
+        for (int i = 0 ; i < 32 ; i++)
         {
-        cambiarEstado("Esperando...", "black");
-//         if (arg2 == 0)
-//            {
-            arreglo_3[0] = 0x5F;
-            serialPort->write(arreglo_3);
-//            arg1 = 1;
-//            }
-
-     emit portOpenOK();
-
-
-            //receivedData.clear();// Clear received string
-            ui->textEdit_UartWindow->clear();
-            ui->textEdit_UartWindow->append(receivedData);
-              for (int i = 0 ; i < 32 ; i++)
-            {
-//                QEventLoop loop;
-//                QTimer::singleShot(100, &loop, &QEventLoop::quit);
-//                loop.exec();
-                arreglo_1[i] = 0x00;
-//                arreglo_2[0] = arreglo_1[i];
-//                serialPort->write(arreglo_2);
-             }
-         for (int j = 0 ; j < 38 ; j++)
-             {
-                arreglo_2[0] = arreglo_1[j];
-                serialPort->write(arreglo_2);  //envia 0 a la corr_sel
-             }
+            arreglo_1[i] = 0x00;
         }
-    else
-            {
-            emit portOpenFail();
-            ui->statusBar->showMessage ("MASTER: CONFIGURASTE EL PUERTO??");
-            }
-}
 
+        // 5. Envío de Barrido (Tu bucle original)
+        // Enviamos los 38 bytes (32 ceros + 6 config actual) para "limpiar" la FPGA.
+        for (int j = 0 ; j < 38 ; j++)
+        {
+            arreglo_2[0] = arreglo_1[j];
+            serialPort->write(arreglo_2);
+        }
+
+        // 6. Estado Final
+        cambiarEstado("Esperando...", "black");
+    }
+    else
+    {
+        emit portOpenFail();
+        cambiarEstado("ERROR: Desconectado", "red");
+        ui->statusBar->showMessage ("MASTER: CONFIGURASTE EL PUERTO??");
+    }
+}
 
 void MainWindow::on_actionEsconder_Caja_de_Texto_toggled(bool arg1)
 {
@@ -1563,4 +1544,34 @@ void MainWindow::cambiarEstado(QString texto, QString color)
     statusLabel->setText(texto);
     // Usamos CSS simple para el color y negrita
     statusLabel->setStyleSheet("color: " + color + "; font-weight: bold;");
+}
+
+
+
+void MainWindow::limpiarMatrizInterna()
+{
+    // 1. Limpiar la lógica (Todos los bits a 0)
+    if (tecla) {
+        tecla->fill(false);
+    }
+
+    // 2. Limpiar la Interfaz (Poner todos los botones en Rojo)
+    // Recorremos el vector de botones de datos (A1...D8)
+    for (QPushButton* boton : botonesDatos) {
+        boton->setStyleSheet("background-color: rgb(150, 50, 50);"); // Rojo
+    }
+
+    // Recorremos los botones de columna (GRAF)
+    for (QPushButton* boton : botonesGraf) {
+        boton->setStyleSheet("background-color: rgb(150, 50, 50);"); // Rojo
+    }
+
+    // 3. Resetear variables de estado
+    columnaSeleccionada = 0;
+
+    // 4. (Opcional) Limpiar el búfer de envío también para reflejar los ceros
+    //    Solo limpiamos la parte de la matriz (0-31), no la configuración.
+    if (arreglo_1.size() >= 32) {
+        for(int i=0; i<32; i++) arreglo_1[i] = 0x00;
+    }
 }

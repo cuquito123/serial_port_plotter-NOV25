@@ -138,7 +138,8 @@ private slots:
         void on_Delay_D_valueChanged(int arg1);
     //funcion para el StatusLabel
         void cambiarEstado(QString texto, QString color);
-
+        // funcion para redefinir tecla cuando se apreta reset y pausa
+        void limpiarMatrizInterna();
 signals:
     void portOpenFail();                                                                  // Emitted when cannot open port
     void portOpenOK();                                                                    // Emitted when port is open

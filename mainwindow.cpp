@@ -130,8 +130,8 @@ MainWindow::MainWindow (QWidget *parent) :
       columnaSeleccionada = 0;
 
       // Inicializar arreglo_1 con el tamaño final de 49 bytes
-      arreglo_1.resize(49);
-      arreglo_1.fill(0x30); // Relleno ASCII '0' por defecto
+      //arreglo_1.resize(49);
+      arreglo_1.fill(0x30); // Relleno ASCII '0' por defecto preguntar a Fabi si esto esta bien
 
       // 2. Configuración de Botones de Columna (GRAF)
       botonesGraf << ui->GRAF_1 << ui->GRAF_2 << ui->GRAF_3 << ui->GRAF_4
@@ -1209,41 +1209,55 @@ void MainWindow::on_EnviarDatos_clicked()
     if (connected == true)
     {
         // 1. UI
-        cambiarEstado("Enviando (Híbrido)...", "green");
+        cambiarEstado("Enviando (Extendido 48B)...", "green");
 
         // 2. Inicio
         arreglo_3[0] = 0x23;
         serialPort->write(arreglo_3);
 
         // --- BUCLE 1: MATRIZ (BINARIO PURO) ---
-        // Esto arregla los LEDs. Enviamos 0 o 1 directo.
+        // (Bytes 0 a 31)
         for(int b = 0; b < 32; b++)
         {
             if (tecla->testBit(b)) {
-                arreglo_1[b] = 0x01; // Encendido
+                arreglo_1[b] = 0x01;
             } else {
-                arreglo_1[b] = 0x00; // Apagado (LEDs apagados)
+                arreglo_1[b] = 0x00;
             }
         }
 
-        // --- ZONA DE CONFIGURACIÓN (32-37) ---
-        // NO TOCAMOS NADA AQUÍ.
-        // Confiamos en que tus slots (on_Ancho_de_pulso_valueChanged, etc.)
-        // ya escribieron el valor correcto en arreglo_1[32]...[36].
-        // Si el SpinBox puso un 5, enviamos 0x05.
+        // (Bytes 32-37: Configuración Legacy y Byte 37 se mantienen intactos)
 
-        // --- BUCLE 2: ENVÍO (38 BYTES) ---
-        for (int b = 0; b < 38; b++)
+        // --- ZONA DE INTEGRACIÓN NUEVA (Bytes 38 al 47) ---
+
+        // A. Byte 38: Posicional (Recalculamos por seguridad)
+        quint8 bytePosicional = leerYFormatearColumna(columnaSeleccionada);
+        arreglo_1[38] = static_cast<char>(bytePosicional);
+
+        // B. Byte 39: Columna Seleccionada (En ASCII, sumando 0x30)
+        arreglo_1[39] = static_cast<char>(columnaSeleccionada + 0x30);
+
+        // C. Bytes 40-47: Tiempo (8 Dígitos)
+        quint32 tiempoTotal = generarNumeroBaseFinal();
+        QVector<quint8> digitosTiempo = descomponerNumero(tiempoTotal);
+
+        for (int i = 0; i < 8; i++) {
+            // Inyectamos desde la posición 40
+            arreglo_1[40 + i] = digitosTiempo[i];
+        }
+
+        // --- BUCLE 2: ENVÍO DEL PAQUETE COMPLETO ---
+        // AHORA ENVIAMOS 48 BYTES (0 al 47)
+        int tamanoPaquete = 48;
+
+        for (int b = 0; b < tamanoPaquete; b++)
         {
             arreglo_2[0] = arreglo_1[b];
             serialPort->write(arreglo_2);
         }
 
-        // Debug: Verifica que veas "0001..." al principio y tus valores (ej "05") al final.
-        qDebug() << "Paquete Híbrido Enviado:" << arreglo_1.left(38).toHex();
-
-        // (Opcional) Restaurar estado
-        // cambiarEstado("Listo", "black");
+        // Debug: Mostramos el paquete entero para verificar la cola de datos
+        qDebug() << "Paquete Extendido Enviado:" << arreglo_1.left(tamanoPaquete).toHex();
     }
     else
     {
@@ -1460,10 +1474,15 @@ quint32 MainWindow::generarNumeroBaseFinal()
 // 5. Descomponedor: Genera vector de 8 dígitos ASCII
 QVector<quint8> MainWindow::descomponerNumero(quint32 numero)
 {
-    int cantidadDeDigitos = 8; // VOLVEMOS A 8 DÍGITOS
+     int cantidadDeDigitos = 8; // Fijo a 8 dígitos, como pediste
+
     QVector<quint8> digitos(cantidadDeDigitos, 0);
 
-    // ... (el resto del bucle for igual)
+    for (int i = cantidadDeDigitos - 1; i >= 0; --i) {
+        if (numero == 0) break;
+        digitos[i] = numero % 10;
+        numero /= 10;
+    }
 
     return digitos;
 }
@@ -1495,13 +1514,14 @@ void MainWindow::actualizarEstadoGraf(int indiceBotonPresionado)
     // Guardamos la memoria de qué columna está activa
     this->columnaSeleccionada = indiceBotonPresionado;
     // --- 3. ACTUALIZACIÓN DEL BÚFER EN TIEMPO REAL ---
-    // (Basado en el protocolo de 47 bytes: 32 teclas + 5 nums + 8 tiempo + 2 col)
-    // Byte 45: Índice de la columna en ASCII (ej. '0' a '7')
-    arreglo_1[45] = static_cast<char>(indiceBotonPresionado + 0x30);
-    // Byte 46: Byte posicional (Estado de los botones de datos para ESTA columna)
+
+
+    // Byte 38: Byte posicional (Estado de los botones de datos para ESTA columna)
     // Leemos el estado actual de la columna recién seleccionada
     quint8 bytePosicional = leerYFormatearColumna(indiceBotonPresionado);
-    arreglo_1[46] = static_cast<char>(bytePosicional);
+    arreglo_1[38] = static_cast<char>(bytePosicional);
+    // Byte 39: Columna seleccionada
+    arreglo_1[39] = static_cast<char>(indiceBotonPresionado + 0x30);
 }
 
 
@@ -1516,9 +1536,9 @@ void MainWindow::actualizarBotonDato(int bit, QPushButton* boton)
     }
     // 2. Actualizar el búfer en tiempo real
     // Como cambiamos un dato, el "byte posicional" de la columna actual cambió.
-    // Lo recalculamos y guardamos en la posición 46.
+    // Lo recalculamos y guardamos en la posición 38.
     quint8 bytePosicional = leerYFormatearColumna(columnaSeleccionada);
-    arreglo_1[46] = static_cast<char>(bytePosicional);
+    arreglo_1[38] = static_cast<char>(bytePosicional);
 }
 //qDebug("Hola que tal %d", tecla->testBit(0));
 

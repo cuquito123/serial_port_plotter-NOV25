@@ -1232,10 +1232,10 @@ void MainWindow::on_EnviarDatos_clicked()
 
         // A. Byte 38: Posicional (Recalculamos por seguridad)
         quint8 bytePosicional = leerYFormatearColumna(columnaSeleccionada);
-        arreglo_1[38] = static_cast<char>(bytePosicional);
+        arreglo_1[37] = static_cast<char>(bytePosicional);
 
         // B. Byte 39: Columna Seleccionada (En ASCII, sumando 0x30)
-        arreglo_1[39] = static_cast<char>(columnaSeleccionada + 0x30);
+        arreglo_1[38] = static_cast<char>(columnaSeleccionada + 0x30);
 
         // C. Bytes 40-47: Tiempo (8 Dígitos)
         quint32 tiempoTotal = generarNumeroBaseFinal();
@@ -1243,12 +1243,12 @@ void MainWindow::on_EnviarDatos_clicked()
 
         for (int i = 0; i < 8; i++) {
             // Inyectamos desde la posición 40
-            arreglo_1[40 + i] = digitosTiempo[i];
+            arreglo_1[39 + i] = digitosTiempo[i];
         }
 
         // --- BUCLE 2: ENVÍO DEL PAQUETE COMPLETO ---
         // AHORA ENVIAMOS 48 BYTES (0 al 47)
-        int tamanoPaquete = 48;
+        int tamanoPaquete = 47;
 
         for (int b = 0; b < tamanoPaquete; b++)
         {

@@ -1210,9 +1210,10 @@ void MainWindow::on_EnviarDatos_clicked()
     {
         // 1. UI
         cambiarEstado("Enviando (Extendido 48B)...", "green");
-
+        //arreglo_3[0] =0x5F; //0x23//_;
+       // serialPort->write(arreglo_3);
         // 2. Inicio
-        arreglo_3[0] = 0x23;
+        arreglo_3[0] = 0x23;//#
         serialPort->write(arreglo_3);
 
         // --- BUCLE 1: MATRIZ (BINARIO PURO) ---
@@ -1248,7 +1249,7 @@ void MainWindow::on_EnviarDatos_clicked()
 
         // --- BUCLE 2: ENVÍO DEL PAQUETE COMPLETO ---
         // AHORA ENVIAMOS 48 BYTES (0 al 47)
-        int tamanoPaquete = 47;
+        int tamanoPaquete = 48;
 
         for (int b = 0; b < tamanoPaquete; b++)
         {

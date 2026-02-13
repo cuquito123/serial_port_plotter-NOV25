@@ -206,7 +206,7 @@ private:
     Console *m_console = nullptr;
 
 //    QByteArray arreglo_f1;
-    QByteArray arreglo_1 = QByteArray(48, false);
+    QByteArray arreglo_1 = QByteArray(46, false);
     QByteArray arreglo_2 = QByteArray(1, false);
     QByteArray arreglo_3 = QByteArray(1, false);
     //QBitArray tecla = QBitArray(32, true);

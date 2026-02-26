@@ -140,6 +140,10 @@ private slots:
         void cambiarEstado(QString texto, QString color);
         // funcion para redefinir tecla cuando se apreta reset y pausa
         void limpiarMatrizInterna();
+
+        void aplicarVisibilidadPlotDesdeTecla();
+
+
 signals:
     void portOpenFail();                                                                  // Emitted when cannot open port
     void portOpenOK();                                                                    // Emitted when port is open

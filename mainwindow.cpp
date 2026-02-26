@@ -533,6 +533,8 @@ void MainWindow::onNewDataArrived(QStringList newData)
                 ui->plot->addGraph();
                 ui->plot->graph()->setPen (line_colors[channels % CUSTOM_LINE_COLORS]);
                 ui->plot->graph()->setName (QString("Channel %1").arg(channels));
+                // ✅ NUEVO: que nazca visible solo si está seleccionado
+                ui->plot->graph()->setVisible(tecla && tecla->testBit(channels));
                 if(ui->plot->legend->item(channels))
                 {
                     ui->plot->legend->item (channels)->setTextColor (line_colors[channels % CUSTOM_LINE_COLORS]);
@@ -1255,9 +1257,12 @@ void MainWindow::on_EnviarDatos_clicked()
             arreglo_2[0] = arreglo_1[b];
             serialPort->write(arreglo_2);
         }
+        
         serialPort->write(arreglo_3); //agregado por santi 12/2/26
         //con esta linea esperaría cerrar la transmision y arreglar el bug de tener
-        //que apretar enviar datos 2 veces.
+        //que apretar enviar datos 2 veces.es una copia de la linea de arriba en esta funcion
+        
+        
         // Debug: Mostramos el paquete entero para verificar la cola de datos
         qDebug() << "Paquete Extendido Enviado:" << arreglo_1.left(tamanoPaquete).toHex();
     }
@@ -1531,6 +1536,7 @@ void MainWindow::actualizarEstadoGraf(int indiceBotonPresionado)
     arreglo_1[38] = static_cast<char>(bytePosicional);
     // Byte 39: Columna seleccionada
     arreglo_1[39] = static_cast<char>(indiceBotonPresionado + 0x30);
+    aplicarVisibilidadPlotDesdeTecla();
 }
 
 
@@ -1548,6 +1554,9 @@ void MainWindow::actualizarBotonDato(int bit, QPushButton* boton)
     // Lo recalculamos y guardamos en la posición 38.
     quint8 bytePosicional = leerYFormatearColumna(columnaSeleccionada);
     arreglo_1[38] = static_cast<char>(bytePosicional);
+
+    // SOLO VISUAL: el plot refleja la botonera
+        aplicarVisibilidadPlotDesdeTecla();
 }
 //qDebug("Hola que tal %d", tecla->testBit(0));
 
@@ -1576,6 +1585,35 @@ void MainWindow::cambiarEstado(QString texto, QString color)
 }
 
 
+void MainWindow::aplicarVisibilidadPlotDesdeTecla()
+{
+    if (!tecla) return;
+
+    const int FIRST_CH = 0;
+    const int LAST_CH  = 31;  // ajustá si tenés más canales reales
+
+    for (int ch = 0; ch < ui->plot->graphCount(); ++ch)
+    {
+        bool on = false;
+
+        // Solo los canales 0..31 dependen de la tecla
+        if (ch >= FIRST_CH && ch <= LAST_CH)
+            on = tecla->testBit(ch);
+        else
+            on = false; // o true si querés que el resto siempre se vea
+
+        QCPGraph *graph = ui->plot->graph(ch);
+        graph->setVisible(on);
+
+        if (auto item = ui->plot->legend->itemWithPlottable(graph))
+            item->setVisible(on);
+
+        if (ch < ui->listWidget_Channels->count())
+            ui->listWidget_Channels->item(ch)->setHidden(!on);
+    }
+
+    ui->plot->replot(QCustomPlot::rpQueuedReplot);
+}
 
 void MainWindow::limpiarMatrizInterna()
 {
@@ -1603,4 +1641,6 @@ void MainWindow::limpiarMatrizInterna()
     if (arreglo_1.size() >= 32) {
         for(int i=0; i<32; i++) arreglo_1[i] = 0x00;
     }
+
+
 }

@@ -510,7 +510,7 @@ void MainWindow::onNewDataArrived(QStringList newData)
     static int channel = 0;
     static int i = 0;
     volatile bool you_shall_NOT_PASS = false;
-
+    qDebug() << "Trama completa:" << newData;
     /* When a fast baud rate is set (921kbps was the first to starts to bug),
        this method is called multiple times (2x in the 921k tests), so a flag
        is used to throttle

@@ -116,11 +116,9 @@ private slots:
 
 //    void on_actionPropiedades_de_Puerto_changed();
 
-    void on_actionconfig_toggled(bool arg1);
+    void on_actionconfig_triggered();
 
 //    void on_actionGraphic_toggled(bool arg1);
-
-//    void on_actionconfig_triggered();
 
 
     void on_EnviarDatos_clicked();

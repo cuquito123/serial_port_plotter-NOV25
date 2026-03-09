@@ -23,7 +23,7 @@
    </size>
   </property>
   <property name="windowTitle">
-   <string>MainWindow</string>
+   <string>Serial Port Plotter</string>
   </property>
   <property name="toolButtonStyle">
    <enum>Qt::ToolButtonIconOnly</enum>
@@ -194,7 +194,7 @@
               </size>
              </property>
              <property name="title">
-              <string/>
+              <string>Controles del Plot</string>
              </property>
              <property name="alignment">
               <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
@@ -934,39 +934,30 @@
        </widget>
       </widget>
       <widget class="QWidget" name="page_12">
-       <widget class="QWidget" name="horizontalLayoutWidget_3">
-        <property name="geometry">
-         <rect>
-          <x>10</x>
-          <y>10</y>
-          <width>891</width>
-          <height>271</height>
-         </rect>
-        </property>
-        <layout class="QHBoxLayout" name="horizontalLayout_3">
-         <property name="leftMargin">
-          <number>6</number>
-         </property>
-         <property name="topMargin">
-          <number>6</number>
-         </property>
-         <property name="rightMargin">
-          <number>6</number>
-         </property>
-         <property name="bottomMargin">
-          <number>6</number>
-         </property>
-        </layout>
-       </widget>
-       <widget class="QWidget" name="verticalLayoutWidget">
-        <property name="geometry">
-         <rect>
-          <x>10</x>
-          <y>290</y>
-          <width>201</width>
-          <height>311</height>
-         </rect>
-        </property>
+       <layout class="QVBoxLayout" name="verticalLayout_page12">
+        <property name="spacing"><number>6</number></property>
+        <property name="leftMargin"><number>8</number></property>
+        <property name="topMargin"><number>8</number></property>
+        <property name="rightMargin"><number>8</number></property>
+        <property name="bottomMargin"><number>8</number></property>
+        <item>
+         <widget class="QCustomPlot" name="plot" native="true">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+            <horstretch>0</horstretch>
+            <verstretch>1</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="minimumSize">
+           <size><width>40</width><height>200</height></size>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_3">
+          <property name="spacing"><number>8</number></property>
+          <item>
+           <widget class="QWidget" name="verticalLayoutWidget">
         <layout class="QVBoxLayout" name="verticalLayout_6">
          <item>
           <widget class="QComboBox" name="TiempoBox">
@@ -990,6 +981,11 @@
              <string>Min</string>
             </property>
            </item>
+           <item>
+            <property name="text">
+             <string>Hs</string>
+            </property>
+           </item>
           </widget>
          </item>
          <item>
@@ -1001,21 +997,21 @@
             <bool>true</bool>
            </property>
            <property name="sizePolicy">
-            <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
              <horstretch>0</horstretch>
              <verstretch>0</verstretch>
             </sizepolicy>
            </property>
            <property name="minimumSize">
             <size>
-             <width>150</width>
-             <height>150</height>
+             <width>100</width>
+             <height>60</height>
             </size>
            </property>
            <property name="maximumSize">
             <size>
              <width>16000</width>
-             <height>20</height>
+             <height>16777215</height>
             </size>
            </property>
            <property name="html">
@@ -1028,16 +1024,10 @@ p, li { white-space: pre-wrap; }
           </widget>
          </item>
         </layout>
-       </widget>
-       <widget class="QWidget" name="layoutWidget">
-        <property name="geometry">
-         <rect>
-          <x>220</x>
-          <y>290</y>
-          <width>664</width>
-          <height>311</height>
-         </rect>
-        </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="layoutWidget">
         <layout class="QHBoxLayout" name="horizontalLayout">
          <item>
           <layout class="QVBoxLayout" name="verticalLayout_5">
@@ -1272,8 +1262,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -1307,8 +1297,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -1358,8 +1348,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -1383,8 +1373,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -1418,8 +1408,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -1453,8 +1443,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -1478,8 +1468,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -1503,8 +1493,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -1528,8 +1518,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -1562,8 +1552,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -1597,8 +1587,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -1622,8 +1612,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -1657,8 +1647,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -1701,8 +1691,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>30</width>
-               <height>30</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -1733,8 +1723,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>30</width>
-               <height>30</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -1768,8 +1758,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -1803,8 +1793,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -1835,8 +1825,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>30</width>
-               <height>30</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -1873,8 +1863,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>30</width>
-               <height>30</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -1898,8 +1888,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -1970,8 +1960,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -2036,8 +2026,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>30</width>
-               <height>30</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -2087,8 +2077,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -2112,8 +2102,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -2147,8 +2137,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>30</width>
-               <height>30</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -2211,8 +2201,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -2246,8 +2236,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>30</width>
-               <height>30</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -2281,8 +2271,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -2306,8 +2296,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -2338,8 +2328,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>30</width>
-               <height>30</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -2366,8 +2356,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -2416,8 +2406,8 @@ p, li { white-space: pre-wrap; }
              </property>
              <property name="minimumSize">
               <size>
-               <width>15</width>
-               <height>15</height>
+               <width>35</width>
+               <height>35</height>
               </size>
              </property>
              <property name="maximumSize">
@@ -2444,29 +2434,11 @@ p, li { white-space: pre-wrap; }
           </layout>
          </item>
         </layout>
-       </widget>
-       <widget class="QCustomPlot" name="plot" native="true">
-        <property name="geometry">
-         <rect>
-          <x>40</x>
-          <y>20</y>
-          <width>851</width>
-          <height>259</height>
-         </rect>
-        </property>
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="minimumSize">
-         <size>
-          <width>40</width>
-          <height>40</height>
-         </size>
-        </property>
-       </widget>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
       </widget>
      </widget>
     </item>
@@ -2703,7 +2675,7 @@ p, li { white-space: pre-wrap; }
   </action>
   <action name="actionconfig">
    <property name="checkable">
-    <bool>true</bool>
+    <bool>false</bool>
    </property>
    <property name="text">
     <string>Config</string>

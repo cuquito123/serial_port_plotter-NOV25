@@ -120,6 +120,8 @@ private slots:
 
 //    void on_actionGraphic_toggled(bool arg1);
 
+//    void on_actionconfig_triggered();
+
 
     void on_EnviarDatos_clicked();
 
@@ -185,6 +187,7 @@ private:
    // QAction *guardarCSVAction;  // Declaración del botón en la barra de menú
 
     QFile* m_csvFile = nullptr;
+    int m_csvFlushCounter = 0;
     void openCsvFile(void);
     void closeCsvFile(void);
 
@@ -217,12 +220,14 @@ private:
         QVector<QPushButton*> botonesDatos;
     // Estado del sistema
         int columnaSeleccionada;
-
+        QVector<int> m_canalAIndiceTrama;
 
    // --- DECLARACIONES DE FUNCIONES LÓGICAS ---
         void actualizarEstadoGraf(int indiceBotonPresionado);
         void actualizarBotonDato(int bit, QPushButton* boton);
         quint8 leerYFormatearColumna(int indiceColumna);
+        void limpiarPlot();
+        QStringList generarLabels();
 
 
 

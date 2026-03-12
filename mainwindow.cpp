@@ -322,7 +322,7 @@ void MainWindow::setupPlot()
     ui->plot->legend->setBrush (gui_colors[3]);
     ui->plot->legend->setBorderPen (gui_colors[2]);
     /* By default, the legend is in the inset layout of the main axis rect. So this is how we access it to change legend placement */
-    ui->plot->axisRect()->insetLayout()->setInsetAlignment (0, Qt::AlignTop|Qt::AlignRight);
+    ui->plot->axisRect()->insetLayout()->setInsetAlignment (0, Qt::AlignTop|Qt::AlignLeft);
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -506,23 +506,19 @@ void MainWindow::replot()
  */
 void MainWindow::onNewDataArrived(QStringList newData)
 {
-    static int data_members = 0;
-    static int channel = 0;
-    static int i = 0;
-    volatile bool you_shall_NOT_PASS = false;
+    if (!plotting) return;
+    if (m_canalAIndiceTrama.isEmpty()) return;  // esperar hasta que Enviar Datos configure los canales
 
-    /* When a fast baud rate is set (921kbps was the first to starts to bug),
-       this method is called multiple times (2x in the 921k tests), so a flag
-       is used to throttle
-       TO-DO: Separate processes, buffer data (1) and process data (2) */
-    while (you_shall_NOT_PASS) {}
-    you_shall_NOT_PASS = true;
+    for (int grafico = 0; grafico < m_canalAIndiceTrama.size(); grafico++)
+    {
+        int tramIdx = m_canalAIndiceTrama[grafico];
+        if (tramIdx >= newData.size()) continue;
+        if (grafico >= ui->plot->graphCount()) break;
 
-    if (plotting)
-      {
-        /* Get size of received list */
-        data_members = newData.size();
+        ui->plot->graph(grafico)->addData(dataPointNumber, newData[tramIdx].toDouble());
+    }
 
+<<<<<<< Updated upstream
         /* Parse data */
         for (i = 0; i < data_members; i++)
           {
@@ -574,6 +570,9 @@ void MainWindow::onNewDataArrived(QStringList newData)
           }
       }
     you_shall_NOT_PASS = false;
+=======
+    dataPointNumber++;
+>>>>>>> Stashed changes
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -896,37 +895,16 @@ void MainWindow::on_actionRecord_stream_triggered()
 {
     if (ui->actionRecord_stream->isChecked())
     {
-      ui->statusBar->showMessage ("Data will be stored in csv file");
-
-      // Generar el nombre predeterminado
-          QString defaultName = QDateTime::currentDateTime().toString("yyyy-MM-dd-HH-mm-ss-") + "data-out.csv";
-
-          // Obtener la ubicación y nombre de archivo del usuario
-          QString filePath = QFileDialog::getSaveFileName(this, "Guardar Archivo",
-                              QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/" + defaultName,
-                              "CSV Files (*.csv);;Todos los archivos (*)");
-          if (filePath == "") {
-              ui->actionRecord_stream->setChecked(false);
-              return;
-          }
-          // Crear el archivo
-             m_csvFile = new QFile(filePath);
-
-
-//         m_csvFile = new QFile(QDateTime::currentDateTime().toString("yyyy-MM-dd-HH-mm-ss-") + "data-out.csv");
-          // m_csvFile = new QFile(QDateTime::currentDateTime().toString("yyyy-MM-d-HH-mm-ss-")+"data-out.csv");
-        if(!m_csvFile)
-            return;
-        if (!m_csvFile->open(QIODevice::ReadWrite | QIODevice::Text))
-              return;
-
-
-
+        openCsvFile();
+        // Si el usuario canceló el diálogo, openCsvFile() deja m_csvFile en nullptr
+        if (!m_csvFile) {
+            ui->actionRecord_stream->setChecked(false);
+        }
     }
     else
     {
-      ui->statusBar->showMessage ("Data will not be stored anymore");
-      closeCsvFile();
+        closeCsvFile();
+        ui->statusBar->showMessage("Grabación detenida.");
     }
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
@@ -1000,86 +978,36 @@ void MainWindow::on_actionClear_triggered()
 
 void MainWindow::openCsvFile()
 {
+    QString defaultName = QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss") + "_experimento.csv";
+    QString filePath = QFileDialog::getSaveFileName(
+        this,
+        "Guardar experimento",
+        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/" + defaultName,
+        "CSV Files (*.csv);;Todos los archivos (*)"
+    );
+    if (filePath.isEmpty()) return;
 
+    m_csvFile = new QFile(filePath);
+    if (!m_csvFile->open(QIODevice::WriteOnly | QIODevice::Text)) {
+        delete m_csvFile;
+        m_csvFile = nullptr;
+        ui->statusBar->showMessage("Error: no se pudo crear el archivo CSV.");
+        return;
+    }
 
+    // Escribir header con nombres de canales
+    QTextStream out(m_csvFile);
+    out << "muestra";
+    for (int i = 0; i < ui->plot->graphCount(); i++) {
+        out << "," << ui->plot->graph(i)->name();
+    }
+    out << "\n";
+    out.flush();
 
-// Generar el nombre predeterminado
-//    QString defaultName = QDateTime::currentDateTime().toString("yyyy-MM-dd-HH-mm-ss-") + "data-out.csv";
-
-//    // Obtener la ubicación y nombre de archivo del usuario
-//    QString filePath = QFileDialog::getSaveFileName(this, "Guardar Archivo",
-//                        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/" + defaultName,
-//                        "CSV Files (*.csv);;Todos los archivos (*)");
-
-//    if (filePath.isEmpty()) {
-//        qDebug() << "No se seleccionó ningún archivo.";
-//        return;
-//    }
-
-//    // Crear el archivo
-//    m_csvFile = new QFile(filePath);
-
-//    if (!m_csvFile) {
-//        qDebug() << "Error al asignar memoria para el archivo.";
-//        return;
-//    }
-
-//    // Intentar abrir el archivo
-//    if (!m_csvFile->open(QIODevice::WriteOnly | QIODevice::Text)) {
-//        qDebug() << "Error al abrir el archivo: " << m_csvFile->errorString();
-//        delete m_csvFile;
-//        m_csvFile = nullptr;
-//        return;
-//    }
-
-//    qDebug() << "Archivo CSV creado en: " << filePath;
-//}
-
-
-
-
-
-
-//void MainWindow::openCsvFile(void)
-//{
-//QString defaultName = QDateTime::currentDateTime().toString("yyyy-MM-d-HH-mm-ss-") + "data-out.csv";
-//QString filePath = QFileDialog::getSaveFileName(nullptr, "Guardar Archivo",
-//                QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/" + defaultName,
-//                "CSV Files (*.csv);;Todos los archivos (*)");
-
-//if (!filePath.isEmpty()) {  // Verifica que el usuario ingresó un nombre
-//    m_csvFile = new QFile(filePath);
-
-//    if (!m_csvFile)
-//        return;
-
-//    if (!m_csvFile->open(QIODevice::ReadWrite | QIODevice::Text))
-//        return;
-//}
-
-
-
-
-
-
-
-//        m_csvFile = new QFile( filePath);
-//        if (!m_csvFile)
-//            return;
-
-//        if (!m_csvFile->open(QIODevice::ReadWrite | QIODevice::Text))
-//            return;
-
-
-//}
-
-//    m_csvFile = new QFile(QDateTime::currentDateTime().toString("yyyy-MM-d-HH-mm-ss-")+"data-out.csv");
-//  if(!m_csvFile)
-//      return;
-//  if (!m_csvFile->open(QIODevice::ReadWrite | QIODevice::Text))
-//        return;
-  
+    ui->statusBar->showMessage("Grabando en: " + filePath);
+    m_csvFlushCounter = 0;
 }
+
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
@@ -1088,10 +1016,12 @@ void MainWindow::openCsvFile()
  */
 void MainWindow::closeCsvFile(void)
 {
-  if(!m_csvFile) return;
-  m_csvFile->close();
-  if(m_csvFile) delete m_csvFile;
-  m_csvFile = nullptr;
+    if (!m_csvFile) return;
+    m_csvFile->flush();   // volcar buffer antes de cerrar
+    m_csvFile->close();
+    delete m_csvFile;
+    m_csvFile = nullptr;
+    m_csvFlushCounter = 0;
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -1101,16 +1031,30 @@ void MainWindow::closeCsvFile(void)
  */
 void MainWindow::saveStream(QStringList newData)
 {
-  if(!m_csvFile)
-    return;
-  if(ui->actionRecord_stream->isChecked())
-  {
-      QTextStream out(m_csvFile);
-      foreach (const QString &str, newData) {
-        out << str << ",";
-      }
-      out << "\n";
-  }
+    if (!m_csvFile || !ui->actionRecord_stream->isChecked())
+        return;
+
+    // QTextStream con buffer interno — no crea uno nuevo en cada llamada
+    static QTextStream out;
+    if (out.device() != m_csvFile) {
+        out.setDevice(m_csvFile);
+        out.setCodec("UTF-8");
+    }
+
+    // Numero de muestra + valores separados por coma
+    out << dataPointNumber;
+    for (const QString &val : newData) {
+        out << "," << val;
+    }
+    out << "\n";
+
+    // Flush al disco cada 100 muestras para no perder datos
+    // sin la penalidad de escribir a disco 50 veces por segundo
+    m_csvFlushCounter++;
+    if (m_csvFlushCounter >= 100) {
+        out.flush();
+        m_csvFlushCounter = 0;
+    }
 }
 
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
@@ -1213,7 +1157,22 @@ void MainWindow::on_EnviarDatos_clicked()
         // 1. UI
         cambiarEstado("Enviando (Extendido 48B)...", "green");
 
-        // 2. Inicio
+        // 2. Limpiar plot y pre-crear los canales pertinentes con labels correctos
+        limpiarPlot();
+        QStringList labels = generarLabels();
+        for (int i = 0; i < labels.size(); i++) {
+            ui->plot->addGraph();
+            ui->plot->graph(i)->setPen(line_colors[i % CUSTOM_LINE_COLORS]);
+            ui->plot->graph(i)->setName(labels[i]);
+            if (ui->plot->legend->item(i))
+                ui->plot->legend->item(i)->setTextColor(line_colors[i % CUSTOM_LINE_COLORS]);
+            ui->listWidget_Channels->addItem(labels[i]);
+            ui->listWidget_Channels->item(i)->setForeground(QBrush(line_colors[i % CUSTOM_LINE_COLORS]));
+            channels++;
+        }
+        ui->plot->replot();
+
+        // 3. Inicio de trama
         arreglo_3[0] = 0x23;
         serialPort->write(arreglo_3);
 
@@ -1644,3 +1603,78 @@ void MainWindow::limpiarMatrizInterna()
 
 
 }
+
+// ─── limpiarPlot ──────────────────────────────────────────────────────────────
+// Resetea el plot completamente antes de aplicar una nueva configuración.
+void MainWindow::limpiarPlot()
+{
+    ui->plot->clearPlottables();
+    ui->listWidget_Channels->clear();
+    channels = 0;
+    dataPointNumber = 0;
+    setupPlot();
+    ui->plot->replot();
+}
+
+// ─── generarLabels ────────────────────────────────────────────────────────────
+// Mapeo de tecla (QBitArray 32 bits):
+//   bit = columna*4 + fila   (fila: A=0, B=1, C=2, D=3 | columna: 0..7)
+//   Ej: A1=bit0, B1=bit1, C1=bit2, D1=bit3, A2=bit4, B2=bit5 ...
+//
+// Mapeo trama FPGA:
+//   trama[0..3] → canales físicos D,C,B,A
+//   trama[4]    → combinación columna 5
+//   trama[5]    → combinación columna 6
+//   trama[6]    → combinación columna 7
+//   trama[7]    → combinación columna 8
+//   trama[8..11]→ vacíos
+//
+// Canal físico es pertinente si tiene algún bit activo en CUALQUIER columna (1-8).
+// Combinación de columna N (5-8) es pertinente si tiene al menos un bit activo.
+QStringList MainWindow::generarLabels()
+{
+    m_canalAIndiceTrama.clear();
+    QStringList labels;
+
+    // ── Canales físicos (A, B, C, D) ─────────────────────────────────────────
+    // fila: A=0, B=1, C=2, D=3
+    // trama: A=3, B=2, C=1, D=0
+    const char* nombreFila[] = { "A", "B", "C", "D" };
+    const int   tramFila[]   = {  3,   2,   1,   0  };
+
+    for (int fila = 0; fila < 4; fila++) {
+        bool activo = false;
+        for (int col = 0; col < 8; col++) {
+            if (tecla->testBit(col * 4 + fila)) { activo = true; break; }
+        }
+        if (activo) {
+            labels << QString(nombreFila[fila]);
+            m_canalAIndiceTrama << tramFila[fila];
+        }
+    }
+
+    // ── Combinaciones (columnas 5-8 de la grilla → trama[4..7]) ─────────────
+    // columna 5 = índice 4 en tecla → trama[4]
+    // columna 6 = índice 5 en tecla → trama[5]
+    // columna 7 = índice 6 en tecla → trama[6]
+    // columna 8 = índice 7 en tecla → trama[7]
+    for (int col = 4; col < 8; col++) {
+        bool bA = tecla->testBit(col * 4 + 0);
+        bool bB = tecla->testBit(col * 4 + 1);
+        bool bC = tecla->testBit(col * 4 + 2);
+        bool bD = tecla->testBit(col * 4 + 3);
+
+        if (bA || bB || bC || bD) {
+            QStringList activos;
+            if (bA) activos << "A";
+            if (bB) activos << "B";
+            if (bC) activos << "C";
+            if (bD) activos << "D";
+            labels << activos.join("&");
+            m_canalAIndiceTrama << (col - 4 + 4); // col5→trama[4], col6→trama[5]...
+        }
+    }
+
+    return labels;
+}
+

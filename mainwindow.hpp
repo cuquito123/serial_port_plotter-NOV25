@@ -186,8 +186,12 @@ private:
 
    // QAction *guardarCSVAction;  // Declaración del botón en la barra de menú
 
-    QFile* m_csvFile = nullptr;
-    int m_csvFlushCounter = 0;
+    QFile*       m_csvFile         = nullptr;
+    QTextStream* m_csvStream       = nullptr;
+    int          m_csvFlushCounter = 0;
+    // Mapeo fijo de 8 columnas para el CSV (una por columna de la grilla)
+    QVector<int>     m_csvTramaIdx;   // índice en trama, -1 si columna vacía
+    QStringList      m_csvLabels;     // label de cada columna, "" si vacía
     void openCsvFile(void);
     void closeCsvFile(void);
 

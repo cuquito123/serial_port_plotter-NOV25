@@ -114,7 +114,10 @@ MainWindow::MainWindow (QWidget *parent) :
   /* Connect update timer to replot slot */
   connect (&updateTimer, SIGNAL (timeout()), this, SLOT (replot()));
 
-  m_csvFile = nullptr;
+  m_csvFile   = nullptr;
+  m_csvStream = nullptr;
+  m_csvTramaIdx.clear();
+  m_csvLabels.clear();
 
   // --- CONFIGURACIÓN DEL STATUS LABEL
       statusLabel = new QLabel(this);
@@ -924,6 +927,12 @@ void MainWindow::on_actionClear_triggered()
 
 void MainWindow::openCsvFile()
 {
+    if (m_canalAIndiceTrama.isEmpty()) {
+        QMessageBox::warning(this, "CSV", "Presioná 'Enviar Datos' antes de iniciar la grabación.");
+        ui->actionRecord_stream->setChecked(false);
+        return;
+    }
+
     QString defaultName = QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss") + "_experimento.csv";
     QString filePath = QFileDialog::getSaveFileName(
         this,
@@ -941,17 +950,55 @@ void MainWindow::openCsvFile()
         return;
     }
 
-    // Escribir header con nombres de canales
-    QTextStream out(m_csvFile);
-    out << "muestra";
-    for (int i = 0; i < ui->plot->graphCount(); i++) {
-        out << "," << ui->plot->graph(i)->name();
-    }
-    out << "\n";
-    out.flush();
+    m_csvStream = new QTextStream(m_csvFile);
+    m_csvStream->setCodec("UTF-8");
 
-    ui->statusBar->showMessage("Grabando en: " + filePath);
+    // ── Construir mapeo fijo de 8 columnas (col1→col8, índices 0→7) ──────────
+    // trama index = 7 - col_idx (la FPGA envía invertido)
+    m_csvTramaIdx.clear();
+    m_csvLabels.clear();
+    for (int col = 0; col < 8; col++) {
+        bool bA = tecla->testBit(col * 4 + 0);
+        bool bB = tecla->testBit(col * 4 + 1);
+        bool bC = tecla->testBit(col * 4 + 2);
+        bool bD = tecla->testBit(col * 4 + 3);
+
+        if (bA || bB || bC || bD) {
+            QStringList activos;
+            if (bA) activos << "A";
+            if (bB) activos << "B";
+            if (bC) activos << "C";
+            if (bD) activos << "D";
+            m_csvLabels  << activos.join("&");
+            m_csvTramaIdx << (7 - col);
+        } else {
+            m_csvLabels   << "";
+            m_csvTramaIdx << -1;
+        }
+    }
+
+    // ── Metadata ─────────────────────────────────────────────────────────────
+    *m_csvStream << "# Experimento: Serial Port Plotter v2.3.0\n";
+    *m_csvStream << "# Fecha: " << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss") << "\n";
+    *m_csvStream << "# Separador: punto y coma (;)\n";
+    *m_csvStream << "#\n";
+
+    // ── Fila de títulos de columna ────────────────────────────────────────────
+    // Formato: Tiempo (s) ; Col 1 - D ; Col 2 - (vacía) ; ...
+    *m_csvStream << "Tiempo (s)";
+    for (int col = 0; col < 8; col++) {
+        QString titulo = QString("Col %1").arg(col + 1);
+        if (!m_csvLabels[col].isEmpty())
+            titulo += " - " + m_csvLabels[col];
+        else
+            titulo += " - (vacía)";
+        *m_csvStream << ";" << titulo;
+    }
+    *m_csvStream << "\n";
+    m_csvStream->flush();
+
     m_csvFlushCounter = 0;
+    ui->statusBar->showMessage("Grabando en: " + filePath);
 }
 
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
@@ -963,7 +1010,13 @@ void MainWindow::openCsvFile()
 void MainWindow::closeCsvFile(void)
 {
     if (!m_csvFile) return;
-    m_csvFile->flush();   // volcar buffer antes de cerrar
+
+    if (m_csvStream) {
+        m_csvStream->flush();
+        delete m_csvStream;
+        m_csvStream = nullptr;
+    }
+
     m_csvFile->close();
     delete m_csvFile;
     m_csvFile = nullptr;
@@ -977,28 +1030,28 @@ void MainWindow::closeCsvFile(void)
  */
 void MainWindow::saveStream(QStringList newData)
 {
-    if (!m_csvFile || !ui->actionRecord_stream->isChecked())
+    if (!m_csvFile || !m_csvStream || !ui->actionRecord_stream->isChecked())
+        return;
+    if (m_csvTramaIdx.isEmpty())
         return;
 
-    // QTextStream con buffer interno — no crea uno nuevo en cada llamada
-    static QTextStream out;
-    if (out.device() != m_csvFile) {
-        out.setDevice(m_csvFile);
-        out.setCodec("UTF-8");
-    }
+    // Timestamp en segundos desde el inicio del plot
+    double tiempo_s = dataPointNumber / 20.0;
+    *m_csvStream << QString::number(tiempo_s, 'f', 3);
 
-    // Numero de muestra + valores separados por coma
-    out << dataPointNumber;
-    for (const QString &val : newData) {
-        out << "," << val;
+    // 8 columnas fijas — una por columna de la grilla (col1→col8)
+    for (int col = 0; col < 8; col++) {
+        int tramIdx = m_csvTramaIdx[col];
+        if (tramIdx >= 0 && tramIdx < newData.size())
+            *m_csvStream << ";" << newData[tramIdx];
+        else
+            *m_csvStream << ";";   // columna vacía → celda vacía
     }
-    out << "\n";
+    *m_csvStream << "\n";
 
-    // Flush al disco cada 100 muestras para no perder datos
-    // sin la penalidad de escribir a disco 50 veces por segundo
     m_csvFlushCounter++;
     if (m_csvFlushCounter >= 100) {
-        out.flush();
+        m_csvStream->flush();
         m_csvFlushCounter = 0;
     }
 }

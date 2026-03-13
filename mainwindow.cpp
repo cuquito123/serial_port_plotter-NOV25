@@ -1523,60 +1523,43 @@ void MainWindow::limpiarPlot()
 // ─── generarLabels ────────────────────────────────────────────────────────────
 // Mapeo de tecla (QBitArray 32 bits):
 //   bit = columna*4 + fila   (fila: A=0, B=1, C=2, D=3 | columna: 0..7)
-//   Ej: A1=bit0, B1=bit1, C1=bit2, D1=bit3, A2=bit4, B2=bit5 ...
 //
-// Mapeo trama FPGA:
-//   trama[0..3] → canales físicos D,C,B,A
-//   trama[4]    → combinación columna 5
-//   trama[5]    → combinación columna 6
-//   trama[6]    → combinación columna 7
-//   trama[7]    → combinación columna 8
-//   trama[8..11]→ vacíos
+// Mapeo trama FPGA (orden invertido respecto a la grilla):
+//   trama[0] → columna 8 (índice 7)
+//   trama[1] → columna 7 (índice 6)
+//   trama[2] → columna 6 (índice 5)
+//   trama[3] → columna 5 (índice 4)
+//   trama[4] → columna 4 (índice 3)
+//   trama[5] → columna 3 (índice 2)
+//   trama[6] → columna 2 (índice 1)
+//   trama[7] → columna 1 (índice 0)
+//   trama[8..11] → vacíos
 //
-// Canal físico es pertinente si tiene algún bit activo en CUALQUIER columna (1-8).
-// Combinación de columna N (5-8) es pertinente si tiene al menos un bit activo.
+// El contenido de cada columna lo define el usuario (canal físico, combinación
+// o vacío). Solo se grafican las columnas con al menos un botón activo.
 QStringList MainWindow::generarLabels()
 {
     m_canalAIndiceTrama.clear();
     QStringList labels;
 
-    // ── Canales físicos (A, B, C, D) ─────────────────────────────────────────
-    // fila: A=0, B=1, C=2, D=3
-    // trama: A=3, B=2, C=1, D=0
-    const char* nombreFila[] = { "A", "B", "C", "D" };
-    const int   tramFila[]   = {  3,   2,   1,   0  };
-
-    for (int fila = 0; fila < 4; fila++) {
-        bool activo = false;
-        for (int col = 0; col < 8; col++) {
-            if (tecla->testBit(col * 4 + fila)) { activo = true; break; }
-        }
-        if (activo) {
-            labels << QString(nombreFila[fila]);
-            m_canalAIndiceTrama << tramFila[fila];
-        }
-    }
-
-    // ── Combinaciones (columnas 5-8 de la grilla → trama[4..7]) ─────────────
-    // columna 5 = índice 4 en tecla → trama[4]
-    // columna 6 = índice 5 en tecla → trama[5]
-    // columna 7 = índice 6 en tecla → trama[6]
-    // columna 8 = índice 7 en tecla → trama[7]
-    for (int col = 4; col < 8; col++) {
+    // Recorrer columnas de 8 a 1 (índices 7 a 0)
+    // trama index = 7 - col_idx
+    for (int col = 7; col >= 0; col--) {
         bool bA = tecla->testBit(col * 4 + 0);
         bool bB = tecla->testBit(col * 4 + 1);
         bool bC = tecla->testBit(col * 4 + 2);
         bool bD = tecla->testBit(col * 4 + 3);
 
-        if (bA || bB || bC || bD) {
-            QStringList activos;
-            if (bA) activos << "A";
-            if (bB) activos << "B";
-            if (bC) activos << "C";
-            if (bD) activos << "D";
-            labels << activos.join("&");
-            m_canalAIndiceTrama << (col - 4 + 4); // col5→trama[4], col6→trama[5]...
-        }
+        if (!bA && !bB && !bC && !bD) continue;  // columna vacía, ignorar
+
+        QStringList activos;
+        if (bA) activos << "A";
+        if (bB) activos << "B";
+        if (bC) activos << "C";
+        if (bD) activos << "D";
+
+        labels << activos.join("&");
+        m_canalAIndiceTrama << (7 - col);  // col8(idx7)→trama[0], col1(idx0)→trama[7]
     }
 
     return labels;

@@ -50,6 +50,11 @@ namespace Ui {
 }
 
 class Console;
+class SerialPortManager;
+class SerialMessageParser;
+class FpgaProtocol;
+class PlotManager;
+class CsvManager;
 
 class MainWindow : public QMainWindow
 {
@@ -66,10 +71,8 @@ private slots:
     void onPortClosed();                                                                  // Called when closing the port
     void replot();                                                                        // Slot for repainting the plot
     void onNewDataArrived(QStringList newData);                                           // Slot for new data from serial port
-    void saveStream(QStringList newData);                                                 // Save the received data to the opened file
     void on_spinAxesMin_valueChanged(int arg1);                                           // Changing lower limit for the plot
     void on_spinAxesMax_valueChanged(int arg1);                                           // Changing upper limit for the plot
-    void readData();                                                                      // Slot for inside serial port
     void writeData(const QByteArray &data);                                               // Slot for outside serial port
     //void on_comboAxes_currentIndexChanged(int index);                                     // Display number of axes and colors in status bar
     void on_spinYStep_valueChanged(int arg1);                                             // Spin box for changing Y axis tick step
@@ -88,9 +91,6 @@ private slots:
     void on_actionPause_Plot_triggered();
     void on_actionClear_triggered();
     void on_actionRecord_stream_triggered();
-
-   // void openCsvFile();  // Función que se ejecuta al hacer clic en el botón
-
 
 //    void on_pushButton_TextEditHide_clicked();
 
@@ -186,22 +186,10 @@ private:
 
    // QAction *guardarCSVAction;  // Declaración del botón en la barra de menú
 
-    QFile*       m_csvFile         = nullptr;
-    QTextStream* m_csvStream       = nullptr;
-    int          m_csvFlushCounter = 0;
-    // Mapeo fijo de 8 columnas para el CSV (una por columna de la grilla)
-    QVector<int>     m_csvTramaIdx;   // índice en trama, -1 si columna vacía
-    QStringList      m_csvLabels;     // label de cada columna, "" si vacía
-    void openCsvFile(void);
-    void closeCsvFile(void);
-
     QTimer updateTimer;                                                                   // Timer used for replotting the plot
     QTime timeOfFirstData;                                                                // Record the time of the first data point
     double timeBetweenSamples;                                                            // Store time between samples
-    QSerialPort *serialPort;                                                              // Serial port; runs in this thread
     QString receivedData;                                                                 // Used for reading from the port
-    int STATE;                                                                            // State of recieiving message from port
-    int NUMBER_OF_POINTS;                                                                 // Number of points plotted
     HelpWindow *helpWindow;
     void createUI();                                                                      // Populate the controls
     void enable_com_controls (bool enable);                                               // Enable/disable controls
@@ -210,44 +198,27 @@ private:
     void openPort(QSerialPortInfo portInfo, int baudRate, QSerialPort::DataBits dataBits, QSerialPort::Parity parity, QSerialPort::StopBits stopBits);
     Console *m_console = nullptr;
 
-//    QByteArray arreglo_f1;
-    QByteArray arreglo_1 = QByteArray(46, false);
-    QByteArray arreglo_2 = QByteArray(1, false);
-    QByteArray arreglo_3 = QByteArray(1, false);
-    //QBitArray tecla = QBitArray(32, true);
-//    QByteArray señal_envio = QByteArray(1, false);                                          // Signal de comienzo de envio de datos
-    QBitArray *tecla;
-     //char  *temp=nullptr;
-
     // Vectores para manejo de botones (para las conexiones con lambdas)
         QVector<QPushButton*> botonesGraf;
         QVector<QPushButton*> botonesDatos;
     // Estado del sistema
         int columnaSeleccionada;
-        QVector<int> m_canalAIndiceTrama;
 
    // --- DECLARACIONES DE FUNCIONES LÓGICAS ---
         void actualizarEstadoGraf(int indiceBotonPresionado);
         void actualizarBotonDato(int bit, QPushButton* boton);
-        quint8 leerYFormatearColumna(int indiceColumna);
         void limpiarPlot();
         QStringList generarLabels();
-
-
 
    // Variable de memoria para la conversión de unidades
             int indiceUnidadAnterior;
 
-   // Funciones Lógicas de Tiempo (Core del protocolo)
-         quint32 convertirAUnidadBase(int valor, int indiceUnidad);
-         int convertirDesdeUnidadBase(quint32 numeroBase, int indiceUnidad);
-         quint32 generarNumeroBaseFinal();
-         QVector<quint8> descomponerNumero(quint32 numero);
-
-
-
     void initActionsConnections();
-    QSerialPort *m_serial = nullptr;
+    SerialPortManager *m_serialManager = nullptr;
+    SerialMessageParser *m_messageParser = nullptr;
+    FpgaProtocol *m_fpgaProtocol = nullptr;
+    PlotManager *m_plotManager = nullptr;
+    CsvManager *m_csvManager = nullptr;
 
 };
 

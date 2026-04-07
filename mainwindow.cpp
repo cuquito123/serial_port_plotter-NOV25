@@ -26,11 +26,14 @@
 
 #include "mainwindow.hpp"
 #include "ui_mainwindow.h"
+#include "serialportmanager.hpp"
+#include "serialmessageparser.hpp"
+#include "fpgaprotocol.hpp"
+#include "plotmanager.hpp"
+#include "csvmanager.hpp"
 #include <x86intrin.h>
-#include <iostream>
 #include <QWidget>
 #include <QDebug>
-using namespace std;
 
 #include "console.h"
 #include "QMessageBox"
@@ -43,12 +46,7 @@ MainWindow::MainWindow (QWidget *parent) :
   QMainWindow (parent),
   ui (new Ui::MainWindow),
 
-//! [1]
-//!
-  /* Populate colors */
     line_colors{
-      /* For channel data (gruvbox palette) */
-      /* Light */
       QColor ("#fb4934"),
       QColor ("#b8bb26"),
       QColor ("#fabd2f"),
@@ -56,7 +54,6 @@ MainWindow::MainWindow (QWidget *parent) :
       QColor ("#d3869b"),
       QColor ("#8ec07c"),
       QColor ("#fe8019"),
-      /* Light */
       QColor ("#cc241d"),
       QColor ("#98971a"),
       QColor ("#d79921"),
@@ -66,88 +63,86 @@ MainWindow::MainWindow (QWidget *parent) :
       QColor ("#d65d0e"),
    },
   gui_colors {
-      /* Monochromatic for axes and ui */
       QColor (48,  47,  47,  255), /**<  0: qdark ui dark/background color */
       QColor (80,  80,  80,  255), /**<  1: qdark ui medium/grid color */
       QColor (170, 170, 170, 255), /**<  2: qdark ui light/text color */
       QColor (48,  47,  47,  200)  /**<  3: qdark ui dark/background color w/transparency */
     },
 
-  /* Main vars */
   connected (false),
   plotting (false),
   dataPointNumber (0),
   channels(0),
 
-  serialPort (nullptr),
-
-  STATE (WAIT_START),
-  NUMBER_OF_POINTS (500),
-
   m_console(new Console),
-
-  m_serial(new QSerialPort(this))
+  m_serialManager(new SerialPortManager(this)),
+  m_messageParser(new SerialMessageParser(this)),
+  m_fpgaProtocol(new FpgaProtocol()),
+  m_plotManager(nullptr)
 
 {
   initActionsConnections();
 
   connect(m_console, &Console::getData, this, &MainWindow::writeData);
+  connect(m_serialManager, &SerialPortManager::rawDataReady, m_messageParser, &SerialMessageParser::appendData);
+  connect(m_serialManager, &SerialPortManager::rawDataReady, this, [this](const QByteArray &raw) {
+      if (!filterDisplayedData) {
+          ui->textEdit_UartWindow->append(QString::fromLatin1(raw));
+      }
+  });
+  connect(m_messageParser, &SerialMessageParser::messageParsed, this, [this](const QStringList &data, const QString &rawMessage) {
+      if (filterDisplayedData) {
+          ui->textEdit_UartWindow->append(rawMessage);
+      }
+      emit newData(data);
+  });
+  connect(this, SIGNAL(newData(QStringList)), this, SLOT(onNewDataArrived(QStringList)));
+  connect(this, &MainWindow::newData, this, [this](const QStringList &data) {
+      if (m_csvManager && ui->actionRecord_stream->isChecked()) {
+          m_csvManager->saveData(data, dataPointNumber);
+      }
+  });
+  connect(m_serialManager, &SerialPortManager::portOpened, this, &MainWindow::portOpenedSuccess);
+  connect(m_serialManager, &SerialPortManager::portOpenFailed, this, &MainWindow::portOpenedFail);
+  connect(m_serialManager, &SerialPortManager::portClosed, this, &MainWindow::onPortClosed);
 
   ui->setupUi (this);
 
-  /* Init UI and populate UI controls */
+  m_plotManager = new PlotManager(ui->plot, ui->listWidget_Channels, this);
+  m_plotManager->setColors(line_colors, gui_colors);
+  connect(m_plotManager, &PlotManager::statusChanged, this, [this](const QString &msg) {
+      ui->statusBar->showMessage(msg);
+  });
+
+  m_csvManager = new CsvManager(m_fpgaProtocol, this);
+  connect(m_csvManager, &CsvManager::statusChanged, this, [this](const QString &msg) {
+      ui->statusBar->showMessage(msg);
+  });
+
   createUI();
+  m_plotManager->setupPlot();
 
-  /* Setup plot area and connect controls slots */
-  setupPlot();
+  connect (ui->plot, SIGNAL (mouseWheel (QWheelEvent*)), m_plotManager, SLOT (onMouseWheel (QWheelEvent*)));
+  connect (ui->plot, SIGNAL (mouseMove (QMouseEvent*)), m_plotManager, SLOT (onMouseMove (QMouseEvent*)));
+  connect (ui->plot, SIGNAL(selectionChangedByUser()), m_plotManager, SLOT(onChannelSelection()));
+  connect (ui->plot, SIGNAL(legendDoubleClick (QCPLegend*, QCPAbstractLegendItem*, QMouseEvent*)), m_plotManager, SLOT(onLegendDoubleClick (QCPLegend*, QCPAbstractLegendItem*, QMouseEvent*)));
+  connect (&updateTimer, SIGNAL (timeout()), m_plotManager, SLOT (replot()));
 
-  /* Wheel over plot when plotting */
-  connect (ui->plot, SIGNAL (mouseWheel (QWheelEvent*)), this, SLOT (on_mouse_wheel_in_plot (QWheelEvent*)));
-
-  /* Slot for printing coordinates */
-  connect (ui->plot, SIGNAL (mouseMove (QMouseEvent*)), this, SLOT (onMouseMoveInPlot (QMouseEvent*)));
-
-  /* Channel selection */
-  connect (ui->plot, SIGNAL(selectionChangedByUser()), this, SLOT(channel_selection()));
-  connect (ui->plot, SIGNAL(legendDoubleClick (QCPLegend*, QCPAbstractLegendItem*, QMouseEvent*)), this, SLOT(legend_double_click (QCPLegend*, QCPAbstractLegendItem*, QMouseEvent*)));
-
-  /* Connect update timer to replot slot */
-  connect (&updateTimer, SIGNAL (timeout()), this, SLOT (replot()));
-
-  m_csvFile   = nullptr;
-  m_csvStream = nullptr;
-  m_csvTramaIdx.clear();
-  m_csvLabels.clear();
-
-  // --- CONFIGURACIÓN DEL STATUS LABEL
       statusLabel = new QLabel(this);
-      statusLabel->setText("Listo"); // Texto inicial
-      statusLabel->setMinimumWidth(100); // Para que no baile la interfaz
-
-      // Lo agregamos a la barra de estado permanentemente
+      statusLabel->setText("Listo");
+      statusLabel->setMinimumWidth(100);
       ui->statusBar->addPermanentWidget(statusLabel);
-
-  // 1. Inicialización de Variables de Estado
-      // CRÍTICO: El QBitArray debe tener tamaño XX
-      tecla = new QBitArray(41);
       columnaSeleccionada = 0;
 
-      // Inicializar arreglo_1 con el tamaño final de 49 bytes
-      //arreglo_1.resize(49);
-      arreglo_1.fill(0x30); // Relleno ASCII '0' por defecto preguntar a Fabi si esto esta bien
-
-      // 2. Configuración de Botones de Columna (GRAF)
       botonesGraf << ui->GRAF_1 << ui->GRAF_2 << ui->GRAF_3 << ui->GRAF_4
                   << ui->GRAF_5 << ui->GRAF_6 << ui->GRAF_7 << ui->GRAF_8;
 
       for (int i = 0; i < botonesGraf.size(); ++i) {
           connect(botonesGraf[i], &QPushButton::clicked, this, [=]() {
-              actualizarEstadoGraf(i); // Llama a la función con el índice de la columna
+              actualizarEstadoGraf(i);
           });
       }
 
-      // 3. Configuración de Botones de Datos (Matriz 4x8)
-      // Orden de mapeo: 0-31 (A1_0, B1_1, C1_2, D1_3, A2_4, B2_5, etc.)
       botonesDatos << ui->A1_0 << ui->B1_1 << ui->C1_2 << ui->D1_3
                    << ui->A2_4 << ui->B2_5 << ui->C2_6 << ui->D2_7
                    << ui->A3_8 << ui->B3_9 << ui->C3_10 << ui->D3_11
@@ -159,32 +154,17 @@ MainWindow::MainWindow (QWidget *parent) :
 
       for (int i = 0; i < botonesDatos.size(); ++i) {
           connect(botonesDatos[i], &QPushButton::clicked, this, [=]() {
-              // Llama a la función con el índice del bit (0-31) y el puntero al botón
               actualizarBotonDato(i, botonesDatos[i]);
           });
       }
 
-      // 4. Sincronización Inicial de la UI
       actualizarEstadoGraf(columnaSeleccionada);
 
-
-
-
-      // --- CONFIGURACIÓN DE TIEMPO ---
-      // Conectamos la señal de cambio de índice
       connect(ui->TiempoBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
               this, &MainWindow::actualizarMaximoDeTiempo);
 
-      // Inicializamos la memoria y los límites
       indiceUnidadAnterior = ui->TiempoBox->currentIndex();
       actualizarMaximoDeTiempo(indiceUnidadAnterior);
-
-
-
-  //tecla = new QBitArray(32, false);
-
-
-//  DatoCrudo = new QByteArray(16, false);
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -194,12 +174,11 @@ MainWindow::MainWindow (QWidget *parent) :
 
 MainWindow::~MainWindow()
 {
-    closeCsvFile();
-      
-    if (serialPort != nullptr)
-      {
-        delete serialPort;
-      }
+    if (m_csvManager) {
+        m_csvManager->closeCsvFile();
+    }
+    delete m_fpgaProtocol;
+    delete m_console;
     delete ui;
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
@@ -265,67 +244,14 @@ void MainWindow::createUI()
 /**
  * @brief Setup the plot area
  */
+/**
+ * @brief Setup the plot area (delegated to PlotManager)
+ */
 void MainWindow::setupPlot()
 {
-    /* Remove everything from the plot */
-    ui->plot->clearItems();
-
-    /* Background for the plot area */
-    ui->plot->setBackground (gui_colors[0]);
-
-    /* Used for higher performance (see QCustomPlot real time example) */
-    ui->plot->setNotAntialiasedElements (QCP::aeAll);
-    QFont font;
-    font.setStyleStrategy (QFont::NoAntialias);
-    ui->plot->legend->setFont (font);
-
-    /** See QCustomPlot examples / styled demo **/
-    /* X Axis: Style */
-    ui->plot->xAxis->grid()->setPen (QPen(gui_colors[2], 1, Qt::DotLine));
-    ui->plot->xAxis->grid()->setSubGridPen (QPen(gui_colors[1], 1, Qt::DotLine));
-    ui->plot->xAxis->grid()->setSubGridVisible (true);
-    ui->plot->xAxis->setBasePen (QPen (gui_colors[2]));
-    ui->plot->xAxis->setTickPen (QPen (gui_colors[2]));
-    ui->plot->xAxis->setSubTickPen (QPen (gui_colors[2]));
-    ui->plot->xAxis->setUpperEnding (QCPLineEnding::esSpikeArrow);
-    ui->plot->xAxis->setTickLabelColor (gui_colors[2]);
-    ui->plot->xAxis->setTickLabelFont (font);
-    /* Range */
-    ui->plot->xAxis->setRange (dataPointNumber - ui->spinPoints->value(), dataPointNumber);
-
-    /* Y Axis */
-    ui->plot->yAxis->grid()->setPen (QPen(gui_colors[2], 1, Qt::DotLine));
-    ui->plot->yAxis->grid()->setSubGridPen (QPen(gui_colors[1], 1, Qt::DotLine));
-    ui->plot->yAxis->grid()->setSubGridVisible (true);
-    ui->plot->yAxis->setBasePen (QPen (gui_colors[2]));
-    ui->plot->yAxis->setTickPen (QPen (gui_colors[2]));
-    ui->plot->yAxis->setSubTickPen (QPen (gui_colors[2]));
-    ui->plot->yAxis->setUpperEnding (QCPLineEnding::esSpikeArrow);
-    ui->plot->yAxis->setTickLabelColor (gui_colors[2]);
-    ui->plot->yAxis->setTickLabelFont (font);
-    /* Range */
-    //ui->plot->yAxis->setRange (ui->spinAxesMin->value(), ui->spinAxesMax->value());
-    /* User can change Y axis tick step with a spin box */
-    //ui->plot->yAxis->setAutoTickStep (false);
-    //ui->plot->yAxis->(ui->spinYStep->value());
-
-    /* User interactions Drag and Zoom are allowed only on X axis, Y is fixed manually by UI control */
-    ui->plot->setInteraction (QCP::iRangeDrag, true);
-    //ui->plot->setInteraction (QCP::iRangeZoom, true);
-    ui->plot->setInteraction (QCP::iSelectPlottables, true);
-    ui->plot->setInteraction (QCP::iSelectLegend, true);
-    ui->plot->axisRect()->setRangeDrag (Qt::Horizontal);
-    ui->plot->axisRect()->setRangeZoom (Qt::Horizontal);
-
-    /* Legend */
-    QFont legendFont;
-    legendFont.setPointSize (9);
-    ui->plot->legend->setVisible (true);
-    ui->plot->legend->setFont (legendFont);
-    ui->plot->legend->setBrush (gui_colors[3]);
-    ui->plot->legend->setBorderPen (gui_colors[2]);
-    /* By default, the legend is in the inset layout of the main axis rect. So this is how we access it to change legend placement */
-    ui->plot->axisRect()->insetLayout()->setInsetAlignment (0, Qt::AlignTop|Qt::AlignLeft);
+    if (m_plotManager) {
+        m_plotManager->setupPlot();
+    }
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -359,34 +285,7 @@ void MainWindow::enable_com_controls (bool enable)
  */
 void MainWindow::openPort (QSerialPortInfo portInfo, int baudRate, QSerialPort::DataBits dataBits, QSerialPort::Parity parity, QSerialPort::StopBits stopBits)
 {
-    serialPort = new QSerialPort(portInfo, nullptr);                                            // Create a new serial port
-
-    connect (this, SIGNAL(portOpenOK()), this, SLOT(portOpenedSuccess()));                 // Connect port signals to GUI slots
-    connect (this, SIGNAL(portOpenFail()), this, SLOT(portOpenedFail()));
-    connect (this, SIGNAL(portClosed()), this, SLOT(onPortClosed()));
-    connect (this, SIGNAL(newData(QStringList)), this, SLOT(onNewDataArrived(QStringList)));
-    connect (serialPort, SIGNAL(readyRead()), this, SLOT(readData()));
-    
-    connect (this, SIGNAL(newData(QStringList)), this, SLOT(saveStream(QStringList)));
-
-    if (serialPort->open (QIODevice::ReadWrite))
-      {
-        serialPort->setBaudRate (baudRate);
-        serialPort->setParity (parity);
-        serialPort->setDataBits (dataBits);
-        serialPort->setStopBits (stopBits);
-
-        emit portOpenOK();
-      }
-    else
-      {
-        emit portOpenFail();
-        qDebug() << "Failed to open serial port " << serialPort->portName() << "Error: " << serialPort->error();
-
-//      QMessageBox::critical(this, tr("Error"), serialPort->errorString());
-//      ShowStatusMessage(tr("Open error"));
-//      qDebug() << serialPort->errorString();
-      }
+    m_serialManager->openPort(portInfo, baudRate, dataBits, parity, stopBits);
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -395,21 +294,13 @@ void MainWindow::openPort (QSerialPortInfo portInfo, int baudRate, QSerialPort::
  */
 void MainWindow::onPortClosed()
 {
-    //qDebug() << "Port closed signal received!";
     updateTimer.stop();
     connected = false;
     plotting = false;
-    
-    //--
-    closeCsvFile();
-    
-    disconnect (serialPort, SIGNAL(readyRead()), this, SLOT(readData()));
-    disconnect (this, SIGNAL(portOpenOK()), this, SLOT(portOpenedSuccess()));             // Disconnect port signals to GUI slots
-    disconnect (this, SIGNAL(portOpenFail()), this, SLOT(portOpenedFail()));
-    disconnect (this, SIGNAL(portClosed()), this, SLOT(onPortClosed()));
-    disconnect (this, SIGNAL(newData(QStringList)), this, SLOT(onNewDataArrived(QStringList)));
-  
-    disconnect (this, SIGNAL(newData(QStringList)), this, SLOT(saveStream(QStringList)));
+
+    if (m_csvManager) {
+        m_csvManager->closeCsvFile();
+    }
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -429,8 +320,9 @@ void MainWindow::on_comboPort_currentIndexChanged (const QString &arg1)
  */
 void MainWindow::portOpenedSuccess()
 {
-    //qDebug() << "Port opened signal received!";
-    setupPlot();                                                                          // Create the QCustomPlot area
+    if (m_plotManager) {
+        m_plotManager->setupPlot();
+    }
     ui->statusBar->showMessage ("Connected!");
 
     ui->A1_0->setStyleSheet("background-color: rgb(150, 50, 50);");
@@ -465,20 +357,9 @@ void MainWindow::portOpenedSuccess()
     ui->B8_29->setStyleSheet("background-color: rgb(150, 50, 50);");
     ui->C8_30->setStyleSheet("background-color: rgb(150, 50, 50);");
     ui->D8_31->setStyleSheet("background-color: rgb(150, 50, 50);");
-    //tecla = new QBitArray(32, false);
-
-    enable_com_controls (false);                                                                // Disable controls if port is open
-    
-//    if(ui->actionRecord_stream->isChecked())
-//    {
-//        //--> Create new CSV file with current date/timestamp
-//        openCsvFile();
-//    }
-    /* Lock the save option while recording */
-//    ui->actionRecord_stream->setEnabled(false);
-
-    updateTimer.start (20);                                                                // Slot is refreshed 20 times per second
-    connected = true;                                                                      // Set flags
+    enable_com_controls(false);
+    updateTimer.start(20);
+    connected = true;
     plotting = true;
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
@@ -494,12 +375,13 @@ void MainWindow::portOpenedFail()
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Replot
+ * @brief Replot (delegated to PlotManager)
  */
 void MainWindow::replot()
 {
-  ui->plot->xAxis->setRange (dataPointNumber - ui->spinPoints->value(), dataPointNumber);
-  ui->plot->replot();
+    if (m_plotManager) {
+        m_plotManager->replot();
+    }
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -509,19 +391,9 @@ void MainWindow::replot()
  */
 void MainWindow::onNewDataArrived(QStringList newData)
 {
-    if (!plotting) return;
-    if (m_canalAIndiceTrama.isEmpty()) return;  // esperar hasta que Enviar Datos configure los canales
+    if (!plotting || !m_plotManager) return;
 
-    for (int grafico = 0; grafico < m_canalAIndiceTrama.size(); grafico++)
-    {
-        int tramIdx = m_canalAIndiceTrama[grafico];
-        if (tramIdx >= newData.size()) continue;
-        if (grafico >= ui->plot->graphCount()) break;
-
-        ui->plot->graph(grafico)->addData(dataPointNumber, newData[tramIdx].toDouble());
-    }
-
-    dataPointNumber++;
+    m_plotManager->addDataPoint(m_plotManager->dataPointCount(), newData, m_fpgaProtocol);
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -531,8 +403,9 @@ void MainWindow::onNewDataArrived(QStringList newData)
  */
 void MainWindow::on_spinAxesMin_valueChanged(int arg1)
 {
-    ui->plot->yAxis->setRangeLower (arg1);
-    ui->plot->replot();
+    if (m_plotManager) {
+        m_plotManager->onAxesMinChanged(arg1);
+    }
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -542,81 +415,18 @@ void MainWindow::on_spinAxesMin_valueChanged(int arg1)
  */
 void MainWindow::on_spinAxesMax_valueChanged(int arg1)
 {
-    ui->plot->yAxis->setRangeUpper (arg1);
-    ui->plot->replot();
-}
-/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
-
-/**
- * @brief Read data for inside serial port
- */
-void MainWindow::readData()
-{
-     if(serialPort->bytesAvailable()) {                                                   // If any bytes are available
-        QByteArray data = serialPort->readAll();                                          // Read all data in QByteArray
-
-        if(!data.isEmpty()) {                                                             // If the byte array is not empty
-           char *temp = data.data();                                                     // Get a '\0'-terminated char* to the data
-          //  temp = data.data();
-
-            if (!filterDisplayedData){
-                ui->textEdit_UartWindow->append(data);
-            }
-            for(int i = 0; temp[i] != '\0'; i++) {                                        // Iterate over the char*
-                switch(STATE) {                                                           // Switch the current state of the message
-                case WAIT_START:                                                          // If waiting for start [$], examine each char
-                    if(temp[i] == START_MSG) {                                            // If the char is $, change STATE to IN_MESSAGE
-                        STATE = IN_MESSAGE;
-                        receivedData.clear();                                             // Clear temporary QString that holds the message
-                    break;                                                                // Break out of the switch
-                    }
-                    break;
-                case IN_MESSAGE:                                                          // If state is IN_MESSAGE
-                    if(temp[i] == END_MSG) {                                              // If char examined is ;, switch state to END_MSG
-                        STATE = WAIT_START;
-                        QStringList incomingData = receivedData.split(' ');               // Split string received from port and put it into list
-                        if(filterDisplayedData){
-                            ui->textEdit_UartWindow->append(receivedData);
-                        }
-                        emit newData(incomingData);                                       // Emit signal for data received with the list
-                        break;
-                    }
-                    else if (isdigit (temp[i]) || isspace (temp[i]) || temp[i] =='-' || temp[i] =='.')
-                      {
-                        /* If examined char is a digit, and not '$' or ';', append it to temporary string */
-                        receivedData.append(temp[i]);
-                      }
-                    break;
-                default: break;
-                }
-            }
-        }
+    if (m_plotManager) {
+        m_plotManager->onAxesMaxChanged(arg1);
     }
 }
-////////////////////////////finaliza el Comando previamente funcional//////////////////////////////////////////////////
-//}
-
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
-// connect(m_console, &Console::getData, this, &MainWindow::writeData);
 
 void MainWindow::writeData(const QByteArray &data)
 {
-    m_serial->write(data);
+    if (m_serialManager) {
+        m_serialManager->writeData(data);
+    }
 }
-/**
- * @brief Number of axes combo; when changed, display axes colors in status bar
- * @param index
- */
-//void MainWindow::on_comboAxes_currentIndexChanged(int index)
-//{
-//    if(index == 0) {
-//      ui->statusBar->showMessage("Axis 1: Red");
-//    } else if(index == 1) {
-//        ui->statusBar->showMessage("Axis 1: Red; Axis 2: Yellow");
-//    } else {
-//        ui->statusBar->showMessage("Axis 1: Red; Axis 2: Yellow; Axis 3: Green");
-//    }
-//}
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
@@ -625,8 +435,9 @@ void MainWindow::writeData(const QByteArray &data)
  */
 void MainWindow::on_spinYStep_valueChanged(int arg1)
 {
-    ui->plot->yAxis->ticker()->setTickCount(arg1);
-    ui->plot->replot();
+    if (m_plotManager) {
+        m_plotManager->onYStepChanged(arg1);
+    }
     ui->spinYStep->setValue(ui->plot->yAxis->ticker()->tickCount());
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
@@ -636,7 +447,9 @@ void MainWindow::on_spinYStep_valueChanged(int arg1)
  */
 void MainWindow::on_savePNGButton_clicked()
 {
-    ui->plot->savePng (QString::number(dataPointNumber) + ".png", 1920, 1080, 2, 50);
+    if (m_plotManager) {
+        m_plotManager->savePlotImage();
+    }
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -646,11 +459,9 @@ void MainWindow::on_savePNGButton_clicked()
  */
 void MainWindow::onMouseMoveInPlot(QMouseEvent *event)
 {
-    int xx = int(ui->plot->xAxis->pixelToCoord(event->x()));
-    int yy = int(ui->plot->yAxis->pixelToCoord(event->y()));
-    QString coordinates("X: %1 Y: %2");
-    coordinates = coordinates.arg(xx).arg(yy);
-    ui->statusBar->showMessage(coordinates);
+    if (m_plotManager) {
+        m_plotManager->onMouseMove(event);
+    }
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -660,10 +471,10 @@ void MainWindow::onMouseMoveInPlot(QMouseEvent *event)
  */
 void MainWindow::on_mouse_wheel_in_plot (QWheelEvent *event)
 {
-  QWheelEvent inverted_event = QWheelEvent(event->posF(), event->globalPosF(),
-                                           -event->pixelDelta(), -event->angleDelta(),
-                                           0, Qt::Vertical, event->buttons(), event->modifiers());
-  QApplication::sendEvent (ui->spinPoints, &inverted_event);
+  // PlotManager handles mouse wheel
+  if (m_plotManager) {
+      m_plotManager->onMouseWheel(event);
+  }
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -674,22 +485,9 @@ void MainWindow::on_mouse_wheel_in_plot (QWheelEvent *event)
  */
 void MainWindow::channel_selection (void)
 {
-    /* synchronize selection of graphs with selection of corresponding legend items */
-     for (int i = 0; i < ui->plot->graphCount(); i++)
-       {
-         QCPGraph *graph = ui->plot->graph(i);
-         QCPPlottableLegendItem *item = ui->plot->legend->itemWithPlottable (graph);
-         if (item->selected())
-           {
-             item->setSelected (true);
-   //          graph->set (true);
-           }
-         else
-           {
-             item->setSelected (false);
-     //        graph->setSelected (false);
-           }
-       }
+    if (m_plotManager) {
+        m_plotManager->onChannelSelection();
+    }
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -700,24 +498,9 @@ void MainWindow::channel_selection (void)
  */
 void MainWindow::legend_double_click(QCPLegend *legend, QCPAbstractLegendItem *item, QMouseEvent *event)
 {
-    Q_UNUSED (legend)
-    Q_UNUSED(event)
-    /* Only react if item was clicked (user could have clicked on border padding of legend where there is no item, then item is 0) */
-    if (item)
-      {
-        QCPPlottableLegendItem *plItem = qobject_cast<QCPPlottableLegendItem*>(item);
-        bool ok;
-        QString newName = QInputDialog::getText (this, "Change channel name", "New name:", QLineEdit::Normal, plItem->plottable()->name(), &ok, Qt::Popup);
-        if (ok)
-          {
-            plItem->plottable()->setName(newName);
-            for(int i=0; i<ui->plot->graphCount(); i++)
-            {
-                ui->listWidget_Channels->item(i)->setText(ui->plot->graph(i)->name());
-            }
-            ui->plot->replot();
-          }
-      }
+    if (m_plotManager) {
+        m_plotManager->onLegendDoubleClick(legend, item, event);
+    }
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -727,9 +510,9 @@ void MainWindow::legend_double_click(QCPLegend *legend, QCPAbstractLegendItem *i
  */
 void MainWindow::on_spinPoints_valueChanged (int arg1)
 {
-    Q_UNUSED(arg1)
-    ui->plot->xAxis->setRange (dataPointNumber - ui->spinPoints->value(), dataPointNumber);
-    ui->plot->replot();
+    if (m_plotManager) {
+        m_plotManager->onPointsChanged(arg1);
+    }
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -811,9 +594,6 @@ void MainWindow::on_actionConnect_triggered()
           stopBits = QSerialPort::TwoStop;
         }
 
-      /* Use local instance of QSerialPort; does not crash */
-      serialPort = new QSerialPort (portInfo, nullptr);
-
       /* Open serial port and connect its signals */
       openPort (portInfo, baudRate, dataBits, parity, stopBits);
   }
@@ -844,15 +624,14 @@ void MainWindow::on_actionRecord_stream_triggered()
 {
     if (ui->actionRecord_stream->isChecked())
     {
-        openCsvFile();
-        // Si el usuario canceló el diálogo, openCsvFile() deja m_csvFile en nullptr
-        if (!m_csvFile) {
+        m_csvManager->openCsvFile(this);
+        if (!m_csvManager->isOpen()) {
             ui->actionRecord_stream->setChecked(false);
         }
     }
     else
     {
-        closeCsvFile();
+        m_csvManager->closeCsvFile();
         ui->statusBar->showMessage("Grabación detenida.");
     }
 }
@@ -865,33 +644,25 @@ void MainWindow::on_actionDisconnect_triggered()
 {
   if (connected)
     {
-      // --- 1. Lógica de Desconexión (Tu código original) ---
-      serialPort->close();
-      emit portClosed();
-      delete serialPort;
-      serialPort = nullptr; // Dangling pointer fix
+      if (m_serialManager) {
+          m_serialManager->closePort();
+      }
 
       enviar = false;
       connected = false;
       plotting = false;
 
-      // --- 2. Actualización de UI (Botones de control) ---
       ui->actionConnect->setEnabled(true);
       ui->actionPause_Plot->setEnabled(false);
       ui->actionDisconnect->setEnabled(false);
       ui->savePNGButton->setEnabled(false);
       enable_com_controls(true);
 
-      // --- 3. Limpieza de Datos ---
       receivedData.clear();
       ui->textEdit_UartWindow->append(receivedData);
 
-      // --- 4. RESETEO DE MATRIZ Y BOTONES (La Optimización) ---
-      // Reemplaza las 32 líneas de setStyleSheet manuales.
-      // Esta función pone todo en rojo y limpia el QBitArray 'tecla'.
       limpiarMatrizInterna();
 
-      // --- 5. Estado Visual Final ---
       ui->statusBar->showMessage("Disconnected!");
       cambiarEstado("DETENIDO (Requiere Rearme)", "red");
     }
@@ -914,163 +685,6 @@ void MainWindow::on_actionClear_triggered()
 }
 
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
-
-//**
-
-//** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
-
-/**
- * @brief Open a new CSV file to save received data
- * C:\Users\LabQCIOp\Desktop\qt creator\serial port ploter\serial_port_plotter-master\
- * build-SerialPortPlotter-Desktop_Qt_5_12_12_MinGW_32_bit-Debug
- */
-
-void MainWindow::openCsvFile()
-{
-    if (m_canalAIndiceTrama.isEmpty()) {
-        QMessageBox::warning(this, "CSV", "Presioná 'Enviar Datos' antes de iniciar la grabación.");
-        ui->actionRecord_stream->setChecked(false);
-        return;
-    }
-
-    QString defaultName = QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss") + "_experimento.csv";
-    QString filePath = QFileDialog::getSaveFileName(
-        this,
-        "Guardar experimento",
-        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/" + defaultName,
-        "CSV Files (*.csv);;Todos los archivos (*)"
-    );
-    if (filePath.isEmpty()) return;
-
-    m_csvFile = new QFile(filePath);
-    if (!m_csvFile->open(QIODevice::WriteOnly | QIODevice::Text)) {
-        delete m_csvFile;
-        m_csvFile = nullptr;
-        ui->statusBar->showMessage("Error: no se pudo crear el archivo CSV.");
-        return;
-    }
-
-    m_csvStream = new QTextStream(m_csvFile);
-    m_csvStream->setCodec("UTF-8");
-
-    // ── Construir mapeo fijo de 8 columnas (col1→col8, índices 0→7) ──────────
-    // trama index = 7 - col_idx (la FPGA envía invertido)
-    m_csvTramaIdx.clear();
-    m_csvLabels.clear();
-    for (int col = 0; col < 8; col++) {
-        bool bA = tecla->testBit(col * 4 + 0);
-        bool bB = tecla->testBit(col * 4 + 1);
-        bool bC = tecla->testBit(col * 4 + 2);
-        bool bD = tecla->testBit(col * 4 + 3);
-
-        if (bA || bB || bC || bD) {
-            QStringList activos;
-            if (bA) activos << "A";
-            if (bB) activos << "B";
-            if (bC) activos << "C";
-            if (bD) activos << "D";
-            m_csvLabels  << activos.join("&");
-            m_csvTramaIdx << (7 - col);
-        } else {
-            m_csvLabels   << "";
-            m_csvTramaIdx << -1;
-        }
-    }
-
-    // ── Metadata ─────────────────────────────────────────────────────────────
-    *m_csvStream << "# Experimento: Serial Port Plotter v2.3.0\n";
-    *m_csvStream << "# Fecha: " << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss") << "\n";
-    *m_csvStream << "# Separador: punto y coma (;)\n";
-    *m_csvStream << "#\n";
-
-    // ── Fila de títulos de columna ────────────────────────────────────────────
-    // Formato: Tiempo (s) ; Col 1 - D ; Col 2 - (vacía) ; ...
-    *m_csvStream << "Tiempo (s)";
-    for (int col = 0; col < 8; col++) {
-        QString titulo = QString("Col %1").arg(col + 1);
-        if (!m_csvLabels[col].isEmpty())
-            titulo += " - " + m_csvLabels[col];
-        else
-            titulo += " - (vacía)";
-        *m_csvStream << ";" << titulo;
-    }
-    *m_csvStream << "\n";
-    m_csvStream->flush();
-
-    m_csvFlushCounter = 0;
-    ui->statusBar->showMessage("Grabando en: " + filePath);
-}
-
-/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
-
-/**
- * @brief Open a new CSV file to save received data
- *
- */
-void MainWindow::closeCsvFile(void)
-{
-    if (!m_csvFile) return;
-
-    if (m_csvStream) {
-        m_csvStream->flush();
-        delete m_csvStream;
-        m_csvStream = nullptr;
-    }
-
-    m_csvFile->close();
-    delete m_csvFile;
-    m_csvFile = nullptr;
-    m_csvFlushCounter = 0;
-}
-/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
-
-/**
- * @brief Open a new CSV file to save received data
- *
- */
-void MainWindow::saveStream(QStringList newData)
-{
-    if (!m_csvFile || !m_csvStream || !ui->actionRecord_stream->isChecked())
-        return;
-    if (m_csvTramaIdx.isEmpty())
-        return;
-
-    // Timestamp en segundos desde el inicio del plot
-    double tiempo_s = dataPointNumber / 20.0;
-    *m_csvStream << QString::number(tiempo_s, 'f', 3);
-
-    // 8 columnas fijas — una por columna de la grilla (col1→col8)
-    for (int col = 0; col < 8; col++) {
-        int tramIdx = m_csvTramaIdx[col];
-        if (tramIdx >= 0 && tramIdx < newData.size())
-            *m_csvStream << ";" << newData[tramIdx];
-        else
-            *m_csvStream << ";";   // columna vacía → celda vacía
-    }
-    *m_csvStream << "\n";
-
-    m_csvFlushCounter++;
-    if (m_csvFlushCounter >= 100) {
-        m_csvStream->flush();
-        m_csvFlushCounter = 0;
-    }
-}
-
-/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
-
-//void MainWindow::on_pushButton_TextEditHide_clicked()
-//{
-//    if(ui->pushButton_TextEditHide->isChecked())
-//    {
-//        ui->textEdit_UartWindow->setVisible(false);
-//        ui->pushButton_TextEditHide->setText("Show TextBox");
-//    }
-//    else
-//    {
-//        ui->textEdit_UartWindow->setVisible(true);
-//        ui->pushButton_TextEditHide->setText("Hide TextBox");
-//    }
-//}
 
 void MainWindow::on_pushButton_ShowallData_clicked()
 {
@@ -1131,95 +745,31 @@ void MainWindow::on_pushButton_clicked()
 
 void MainWindow::initActionsConnections()
 {
-//    connect(ui->actionConnect, &QAction::triggered, this, &MainWindow::openPort);
-//    connect(ui->actionDisconnect, &QAction::triggered, this, &MainWindow::closeSerialPort);
-//    connect(ui->actionQuit, &QAction::triggered, this, &MainWindow::close);
-//    connect(ui->actionConfigure, &QAction::triggered, m_settings, &SettingsDialog::show);
-//    connect(ui->actionClear, &QAction::triggered, m_console, &Console::clear);
-//    connect(ui->actionAbout, &QAction::triggered, this, &MainWindow::about);
-//    connect(ui->actionAboutQt, &QAction::triggered, qApp, &QApplication::aboutQt);
 }
-
-//void QBitArray::setBit(int 1, bool value = false);
-//QBitArray::tecla (qsizetype 32, bool value=true);
-
-//void QBitArray::setBit()
-//{
-//tecla.setBit(0,false);
-//}
-
 
 void MainWindow::on_EnviarDatos_clicked()
 {
     if (connected == true)
     {
-        // 1. UI
         cambiarEstado("Enviando (Extendido 48B)...", "green");
 
-        // 2. Limpiar plot y pre-crear los canales pertinentes con labels correctos
         limpiarPlot();
-        QStringList labels = generarLabels();
-        for (int i = 0; i < labels.size(); i++) {
-            ui->plot->addGraph();
-            ui->plot->graph(i)->setPen(line_colors[i % CUSTOM_LINE_COLORS]);
-            ui->plot->graph(i)->setName(labels[i]);
-            if (ui->plot->legend->item(i))
-                ui->plot->legend->item(i)->setTextColor(line_colors[i % CUSTOM_LINE_COLORS]);
-            ui->listWidget_Channels->addItem(labels[i]);
-            ui->listWidget_Channels->item(i)->setForeground(QBrush(line_colors[i % CUSTOM_LINE_COLORS]));
-            channels++;
-        }
-        ui->plot->replot();
-
-        // 3. Inicio de trama
-        arreglo_3[0] = 0x23;
-        serialPort->write(arreglo_3);
-
-        // --- BUCLE 1: MATRIZ (BINARIO PURO) ---
-        // (Bytes 0 a 31)
-        for(int b = 0; b < 32; b++)
-        {
-            if (tecla->testBit(b)) {
-                arreglo_1[b] = 0x01;
-            } else {
-                arreglo_1[b] = 0x00;
-            }
+        QStringList labels = m_fpgaProtocol->generateLabels();
+        if (m_plotManager) {
+            m_plotManager->setupGraphsFromLabels(labels);
+            channels = m_plotManager->channelCount();
         }
 
-        // (Bytes 32-37: Configuración Legacy y Byte 37 se mantienen intactos)
+        QByteArray startCommand = m_fpgaProtocol->buildStartCommand();
+        QByteArray packet = m_fpgaProtocol->buildExtendedPacket(ui->TiempoNum->value(), ui->TiempoBox->currentIndex());
 
-        // --- ZONA DE INTEGRACIÓN NUEVA (Bytes 38 al 47) ---
-
-        // A. Byte 37: Posicional (Recalculamos por seguridad)
-        quint8 bytePosicional = leerYFormatearColumna(columnaSeleccionada);
-        arreglo_1[37] = static_cast<char>(bytePosicional + 0x30);
-
-        // B. Byte 38: Columna Seleccionada (En ASCII, sumando 0x30)
-        arreglo_1[38] = static_cast<char>(columnaSeleccionada + 0x30);
-
-        // C. Bytes 40-47: Tiempo (8 Dígitos)
-        quint32 tiempoTotal = generarNumeroBaseFinal();
-        QVector<quint8> digitosTiempo = descomponerNumero(tiempoTotal);
-
-        for (int i = 0; i < 8; i++) {
-            // Inyectamos desde la posición 40
-            arreglo_1[39 + i] = digitosTiempo[i];
+        if (m_serialManager) {
+            m_serialManager->writeData(startCommand);
+            m_serialManager->writeData(packet);
+            m_serialManager->writeData(startCommand);
         }
 
-        // --- BUCLE 2: ENVÍO DEL PAQUETE COMPLETO ---
-        // AHORA ENVIAMOS 48 BYTES (0 al 47)
-        int tamanoPaquete = 47;
-
-        for (int b = 0; b < tamanoPaquete; b++)
-        {
-            arreglo_2[0] = arreglo_1[b];
-            serialPort->write(arreglo_2);
-        }
-        serialPort->write(arreglo_3); //agregado por santi 12/2/26
-        //con esta linea esperaría cerrar la transmision y arreglar el bug de tener
-        //que apretar enviar datos 2 veces.
-        // Debug: Mostramos el paquete entero para verificar la cola de datos
-        qDebug() << "Paquete Extendido Enviado:" << arreglo_1.left(tamanoPaquete).toHex();
+        qDebug() << "Paquete Extendido Enviado:" << packet.toHex();
     }
     else
     {
@@ -1232,42 +782,23 @@ void MainWindow::on_ResetearDatos_clicked()
 {
     if (connected == true)
     {
-        // 1. Feedback Visual (Agregado seguro)
         cambiarEstado("RESETEANDO...", "orange");
 
-        // 2. Enviar el comando de Reset a la FPGA (Tu lógica original)
-        arreglo_3[0] = 0x5F;
-        serialPort->write(arreglo_3);
+        if (m_serialManager) {
+            m_serialManager->writeData(m_fpgaProtocol->buildResetCommand());
+        }
 
         emit portOpenOK();
 
-        // 3. Limpieza de Consola (Tu lógica original)
-        // receivedData.clear(); // (Estaba comentado en tu original)
         ui->textEdit_UartWindow->clear();
         ui->textEdit_UartWindow->append(receivedData);
 
-        // --- AGREGADO SEGURO: Actualización Visual de Botones ---
-        // Llamamos a esto SOLO para poner los botones en ROJO y limpiar 'tecla'.
-        // No confiamos en que esto limpie arreglo_1, lo haremos manualmente abajo
-        // para respetar tu lógica original al 100%.
         limpiarMatrizInterna();
 
-        // 4. Limpieza de Datos para Envío (Tu bucle original)
-        // Ponemos ceros explícitamente en los primeros 32 bytes.
-        for (int i = 0 ; i < 32 ; i++)
-        {
-            arreglo_1[i] = 0x00;
+        if (m_serialManager) {
+            m_serialManager->writeData(m_fpgaProtocol->buildResetSweepPacket());
         }
 
-        // 5. Envío de Barrido (Tu bucle original)
-        // Enviamos los 38 bytes (32 ceros + 6 config actual) para "limpiar" la FPGA.
-        for (int j = 0 ; j < 38 ; j++)
-        {
-            arreglo_2[0] = arreglo_1[j];
-            serialPort->write(arreglo_2);
-        }
-
-        // 6. Estado Final
         cambiarEstado("Esperando...", "black");
     }
     else
@@ -1309,19 +840,11 @@ void MainWindow::on_actionconfig_triggered()
         ui->stackedWidget->setCurrentIndex(0);
 }
 
-
-// --- LÓGICA DE TIEMPO Y PROTOCOLO (Ajustada a 8 Dígitos) ---
-
-// 1. Slot: Gestiona límites y conversión al cambiar la unidad en la UI
 void MainWindow::actualizarMaximoDeTiempo(int nuevoIndice)
 {
-    // --- A. Lógica de Conversión (Intacta) ---
     int valorActual = ui->TiempoNum->value();
-    quint32 numeroBase = convertirAUnidadBase(valorActual, indiceUnidadAnterior);
-    int nuevoValor = convertirDesdeUnidadBase(numeroBase, nuevoIndice);
-
-    // --- B. Lógica de Límites (8 DÍGITOS + MÍNIMO 5.6ms) ---
-    // Capacidad Máxima (8 dígitos): 99,999,999 unidades internas
+    quint32 numeroBase = m_fpgaProtocol->convertToBase(valorActual, indiceUnidadAnterior);
+    int nuevoValor = m_fpgaProtocol->convertFromBase(numeroBase, nuevoIndice);
 
     int nuevoMinimo;
     int nuevoMaximo; // Usamos int porque el QSpinBox es int32
@@ -1363,258 +886,75 @@ void MainWindow::actualizarMaximoDeTiempo(int nuevoIndice)
             nuevoMaximo = 99999;
     }
 
-    // --- C. Aplicación de Cambios ---
     ui->TiempoNum->setRange(nuevoMinimo, nuevoMaximo);
     ui->TiempoNum->setValue(nuevoValor);
 
     indiceUnidadAnterior = nuevoIndice;
 }
 
-// 2. Helper: Convierte UI -> Unidad Base (100 µs)
-quint32 MainWindow::convertirAUnidadBase(int valor, int indiceUnidad)
-{
-    // Usamos quint64 para el cálculo intermedio
-    quint64 calculo = 0;
-
-    switch (indiceUnidad) {
-        case 0: // µs (100us base) -> Dividir por 100
-            calculo = static_cast<quint64>(valor) / 100;
-            break;
-        case 1: // ms -> x 10
-            calculo = static_cast<quint64>(valor) * 10;
-            break;
-        case 2: // s -> x 10,000
-            calculo = static_cast<quint64>(valor) * 10000;
-            break;
-        case 3: // min -> x 600,000
-            calculo = static_cast<quint64>(valor) * 600000;
-            break;
-        case 4: // hs -> x 36,000,000
-            calculo = static_cast<quint64>(valor) * 36000000;
-            break;
-    }
-    return static_cast<quint32>(calculo);
-}
-
-// 3. Helper: Convierte Unidad Base (100 µs) -> UI
-int MainWindow::convertirDesdeUnidadBase(quint32 numeroBase, int indiceUnidad)
-{
-    // Operación inversa para la UI
-    switch (indiceUnidad) {
-        case 0: return numeroBase * 100;      // µs
-        case 1: return numeroBase / 10;       // ms
-        case 2: return numeroBase / 10000;    // s
-        case 3: return numeroBase / 600000;   // min
-        case 4: return numeroBase / 36000000; // hs
-        default: return 0;
-    }
-}
-
-// 4. Procesador Principal: Genera el número final para enviar
-quint32 MainWindow::generarNumeroBaseFinal()
-{
-    int valor = ui->TiempoNum->value();
-    int indice = ui->TiempoBox->currentIndex();
-
-    // Paso 1: Obtener valor en unidades base
-    quint32 numeroBase = convertirAUnidadBase(valor, indice);
-
-    // Paso 2: Aplicar regla de Múltiplo de 8
-    quint32 resto = numeroBase % 8;
-    if (resto != 0) {
-        qDebug() << "Redondeando número base:" << numeroBase << "a" << (numeroBase - resto);
-        numeroBase -= resto;
-    }
-
-    return numeroBase;
-}
-
-// 5. Descomponedor: Genera vector de 8 dígitos ASCII
-QVector<quint8> MainWindow::descomponerNumero(quint32 numero)
-{
-    int cantidadDeDigitos = 8;
-
-    // CAMBIO 1: Inicializamos con '0' (0x30) en vez de 0 (0x00).
-    // Así, si el número es "5", los ceros a la izquierda serán texto "00000005".
-    QVector<quint8> digitos(cantidadDeDigitos, '0');
-
-    for (int i = cantidadDeDigitos - 1; i >= 0; --i) {
-        if (numero == 0) break;
-
-        // CAMBIO 2: Sumamos 0x30 para convertir el valor en ASCII.
-        // Ejemplo: 5 + 0x30 = 0x35 (Carácter '5')
-        digitos[i] = (numero % 10) + 0x30;
-
-        numero /= 10;
-    }
-
-    return digitos;
-}
-
-
-// 6. Slots de actualización en tiempo real para los 5 parámetros numéricos
-void MainWindow::on_Ancho_de_pulso_valueChanged(int arg1) { arreglo_1[32] = arg1; }
-void MainWindow::on_Delay_A_valueChanged(int arg1)        { arreglo_1[33] = arg1; }
-void MainWindow::on_Delay_B_valueChanged(int arg1)        { arreglo_1[34] = arg1; }
-void MainWindow::on_Delay_C_valueChanged(int arg1)        { arreglo_1[35] = arg1; }
-void MainWindow::on_Delay_D_valueChanged(int arg1)        { arreglo_1[36] = arg1; }
+void MainWindow::on_Ancho_de_pulso_valueChanged(int arg1) { m_fpgaProtocol->setPulseWidth(static_cast<quint8>(arg1)); }
+void MainWindow::on_Delay_A_valueChanged(int arg1)        { m_fpgaProtocol->setDelayA(static_cast<quint8>(arg1)); }
+void MainWindow::on_Delay_B_valueChanged(int arg1)        { m_fpgaProtocol->setDelayB(static_cast<quint8>(arg1)); }
+void MainWindow::on_Delay_C_valueChanged(int arg1)        { m_fpgaProtocol->setDelayC(static_cast<quint8>(arg1)); }
+void MainWindow::on_Delay_D_valueChanged(int arg1)        { m_fpgaProtocol->setDelayD(static_cast<quint8>(arg1)); }
 
 void MainWindow::actualizarEstadoGraf(int indiceBotonPresionado)
 {
-    // --- 1. RESETEO GENERAL ---
-    // Apagamos bits lógicos de columnas anteriores (32-39)
-    for (int i = 32; i <= 39; ++i) {
-        tecla->clearBit(i);
-    }
-    // Ponemos TODOS los botones de columna en ROJO
     for (QPushButton* boton : botonesGraf) {
         boton->setStyleSheet("background-color: rgb(150, 50, 50);");
     }
-    // --- 2. ACTIVACIÓN ESPECÍFICA ---
-    // Activamos el bit lógico correspondiente
-    int bitParaActivar = 32 + indiceBotonPresionado;
-    tecla->setBit(bitParaActivar);
-    // Ponemos el botón presionado en VERDE
+
     botonesGraf[indiceBotonPresionado]->setStyleSheet("background-color: rgb(15, 125, 15);");
-    // Guardamos la memoria de qué columna está activa
-    this->columnaSeleccionada = indiceBotonPresionado;
-    // --- 3. ACTUALIZACIÓN DEL BÚFER EN TIEMPO REAL ---
-
-
-    // Byte 38: Byte posicional (Estado de los botones de datos para ESTA columna)
-    // Leemos el estado actual de la columna recién seleccionada
-    quint8 bytePosicional = leerYFormatearColumna(indiceBotonPresionado);
-    arreglo_1[38] = static_cast<char>(bytePosicional);
-    // Byte 39: Columna seleccionada
-    arreglo_1[39] = static_cast<char>(indiceBotonPresionado + 0x30);
+    columnaSeleccionada = indiceBotonPresionado;
+    m_fpgaProtocol->selectColumn(indiceBotonPresionado);
 }
-
 
 void MainWindow::actualizarBotonDato(int bit, QPushButton* boton)
 {
-    // 1. Alternar bit y color
-    tecla->toggleBit(bit);
-    if (tecla->testBit(bit)) {
+    m_fpgaProtocol->toggleButton(bit);
+    if (m_fpgaProtocol->buttonState(bit)) {
         boton->setStyleSheet("background-color: rgb(15, 125, 15);"); // Verde
     } else {
         boton->setStyleSheet("background-color: rgb(150, 50, 50);"); // Rojo
     }
-    // 2. Actualizar el búfer en tiempo real
-    // Como cambiamos un dato, el "byte posicional" de la columna actual cambió.
-    // Lo recalculamos y guardamos en la posición 38.
-    quint8 bytePosicional = leerYFormatearColumna(columnaSeleccionada);
-    arreglo_1[38] = static_cast<char>(bytePosicional);
 }
-//qDebug("Hola que tal %d", tecla->testBit(0));
-
-
-// 1. Función para leer el estado de una columna y formatear el byte posicional
-quint8 MainWindow::leerYFormatearColumna(int indiceColumna)
-{
-    // Esta función está diseñada para leer el estado de las 4 filas (A, B, C, D)
-    // de una columna específica.
-    bool bA = tecla->testBit(indiceColumna * 4 + 0);
-    bool bB = tecla->testBit(indiceColumna * 4 + 1);
-    bool bC = tecla->testBit(indiceColumna * 4 + 2);
-    bool bD = tecla->testBit(indiceColumna * 4 + 3);
-
-    // Empaqueta los 4 booleanos en un único byte (0-15)
-    return (bD << 3) | (bC << 2) | (bB << 1) | (bA << 0);
-}
-
-// 2. Lógica para los botones de columna (GRAF)
 
 void MainWindow::cambiarEstado(QString texto, QString color)
 {
     statusLabel->setText(texto);
-    // Usamos CSS simple para el color y negrita
     statusLabel->setStyleSheet("color: " + color + "; font-weight: bold;");
 }
 
-
-
 void MainWindow::limpiarMatrizInterna()
 {
-    // 1. Limpiar la lógica (Todos los bits a 0)
-    if (tecla) {
-        tecla->fill(false);
+    if (m_fpgaProtocol) {
+        m_fpgaProtocol->resetMatrix();
     }
 
-    // 2. Limpiar la Interfaz (Poner todos los botones en Rojo)
-    // Recorremos el vector de botones de datos (A1...D8)
     for (QPushButton* boton : botonesDatos) {
-        boton->setStyleSheet("background-color: rgb(150, 50, 50);"); // Rojo
+        boton->setStyleSheet("background-color: rgb(150, 50, 50);");
     }
 
-    // Recorremos los botones de columna (GRAF)
     for (QPushButton* boton : botonesGraf) {
-        boton->setStyleSheet("background-color: rgb(150, 50, 50);"); // Rojo
+        boton->setStyleSheet("background-color: rgb(150, 50, 50);");
     }
 
-    // 3. Resetear variables de estado
     columnaSeleccionada = 0;
-
-    // 4. (Opcional) Limpiar el búfer de envío también para reflejar los ceros
-    //    Solo limpiamos la parte de la matriz (0-31), no la configuración.
-    if (arreglo_1.size() >= 32) {
-        for(int i=0; i<32; i++) arreglo_1[i] = 0x00;
-    }
 }
 
 // ─── limpiarPlot ──────────────────────────────────────────────────────────────
 // Resetea el plot completamente antes de aplicar una nueva configuración.
 void MainWindow::limpiarPlot()
 {
-    ui->plot->clearPlottables();
-    ui->listWidget_Channels->clear();
-    channels = 0;
-    dataPointNumber = 0;
-    setupPlot();
-    ui->plot->replot();
+    if (m_plotManager) {
+        m_plotManager->clearPlot();
+        dataPointNumber = m_plotManager->dataPointCount();
+        channels = m_plotManager->channelCount();
+    }
 }
 
-// ─── generarLabels ────────────────────────────────────────────────────────────
-// Mapeo de tecla (QBitArray 32 bits):
-//   bit = columna*4 + fila   (fila: A=0, B=1, C=2, D=3 | columna: 0..7)
-//
-// Mapeo trama FPGA (orden invertido respecto a la grilla):
-//   trama[0] → columna 8 (índice 7)
-//   trama[1] → columna 7 (índice 6)
-//   trama[2] → columna 6 (índice 5)
-//   trama[3] → columna 5 (índice 4)
-//   trama[4] → columna 4 (índice 3)
-//   trama[5] → columna 3 (índice 2)
-//   trama[6] → columna 2 (índice 1)
-//   trama[7] → columna 1 (índice 0)
-//   trama[8..11] → vacíos
-//
-// El contenido de cada columna lo define el usuario (canal físico, combinación
-// o vacío). Solo se grafican las columnas con al menos un botón activo.
 QStringList MainWindow::generarLabels()
 {
-    m_canalAIndiceTrama.clear();
-    QStringList labels;
-
-    // Recorrer columnas de 8 a 1 (índices 7 a 0)
-    // trama index = 7 - col_idx
-    for (int col = 7; col >= 0; col--) {
-        bool bA = tecla->testBit(col * 4 + 0);
-        bool bB = tecla->testBit(col * 4 + 1);
-        bool bC = tecla->testBit(col * 4 + 2);
-        bool bD = tecla->testBit(col * 4 + 3);
-
-        if (!bA && !bB && !bC && !bD) continue;  // columna vacía, ignorar
-
-        QStringList activos;
-        if (bA) activos << "A";
-        if (bB) activos << "B";
-        if (bC) activos << "C";
-        if (bD) activos << "D";
-
-        labels << activos.join("&");
-        m_canalAIndiceTrama << (7 - col);  // col8(idx7)→trama[0], col1(idx0)→trama[7]
-    }
-
-    return labels;
+    return m_fpgaProtocol->generateLabels();
 }
 

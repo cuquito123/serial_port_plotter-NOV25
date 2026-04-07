@@ -18,12 +18,22 @@ SOURCES += main.cpp\
         console.cpp \
         mainwindow.cpp \
         qcustomplot/qcustomplot.cpp \
-        helpwindow.cpp
+        helpwindow.cpp \
+        serialportmanager.cpp \
+        serialmessageparser.cpp \
+        fpgaprotocol.cpp \
+        plotmanager.cpp \
+        csvmanager.cpp
 
 HEADERS  += mainwindow.hpp \
         console.h \
         qcustomplot/qcustomplot.h \
-        helpwindow.hpp
+        helpwindow.hpp \
+        serialportmanager.hpp \
+        serialmessageparser.hpp \
+        fpgaprotocol.hpp \
+        plotmanager.hpp \
+        csvmanager.hpp
 
 
 FORMS    += mainwindow.ui \

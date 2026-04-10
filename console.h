@@ -59,21 +59,30 @@ class Console : public QPlainTextEdit
     Q_OBJECT
 
 signals:
+    // Emite los bytes tipeados para enviarlos al puerto serie.
     void getData(const QByteArray &data);
 
 public:
+    // Constructor del widget de consola serial.
     explicit Console(QWidget *parent = nullptr);
 
+    // Inserta datos recibidos en la consola y mantiene scroll al final.
     void putData(const QByteArray &data);
+    // Activa o desactiva el eco local del texto tipeado.
     void setLocalEchoEnabled(bool set);
 
 protected:
+    // Captura teclas para reenviar datos y limitar navegacion de cursor.
     void keyPressEvent(QKeyEvent *e) override;
+    // Mantiene foco en la consola ante click simple.
     void mousePressEvent(QMouseEvent *e) override;
+    // Bloquea seleccion/acciones por doble click.
     void mouseDoubleClickEvent(QMouseEvent *e) override;
+    // Deshabilita menu contextual por defecto.
     void contextMenuEvent(QContextMenuEvent *e) override;
 
 private:
+    // Controla si lo tipeado se muestra en pantalla ademas de emitirse.
     bool m_localEchoEnabled = false;
 };
 

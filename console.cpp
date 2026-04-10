@@ -56,8 +56,10 @@
 Console::Console(QWidget *parent) :
     QPlainTextEdit(parent)
 {
+    // Limita cantidad de lineas guardadas para evitar crecimiento indefinido.
     document()->setMaximumBlockCount(100);
     QPalette p = palette();
+    // Tema visual de consola: fondo negro y texto verde.
     p.setColor(QPalette::Base, Qt::black);
     p.setColor(QPalette::Text, Qt::green);
     setPalette(p);
@@ -65,6 +67,7 @@ Console::Console(QWidget *parent) :
 
 void Console::putData(const QByteArray &data)
 {
+    // Muestra datos entrantes y desplaza la vista al final.
     insertPlainText(data);
 
     QScrollBar *bar = verticalScrollBar();
@@ -78,6 +81,7 @@ void Console::setLocalEchoEnabled(bool set)
 
 void Console::keyPressEvent(QKeyEvent *e)
 {
+    // Reenvia caracteres al exterior y evita teclas de navegacion/edicion.
     switch (e->key()) {
     case Qt::Key_Backspace:
     case Qt::Key_Left:
@@ -94,16 +98,19 @@ void Console::keyPressEvent(QKeyEvent *e)
 
 void Console::mousePressEvent(QMouseEvent *e)
 {
+    // Evita seleccion de texto: solo recupera foco.
     Q_UNUSED(e)
     setFocus();
 }
 
 void Console::mouseDoubleClickEvent(QMouseEvent *e)
 {
+    // Ignora doble click para mantener comportamiento de terminal simple.
     Q_UNUSED(e)
 }
 
 void Console::contextMenuEvent(QContextMenuEvent *e)
 {
+    // Ignora menu contextual para evitar acciones de edicion.
     Q_UNUSED(e)
 }

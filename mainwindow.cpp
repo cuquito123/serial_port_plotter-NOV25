@@ -39,7 +39,7 @@
 #include "QMessageBox"
 
 /**
- * @brief Constructor
+ * @brief Constructor principal de la ventana.
  * @param parent
  */
 MainWindow::MainWindow (QWidget *parent) :
@@ -63,10 +63,10 @@ MainWindow::MainWindow (QWidget *parent) :
       QColor ("#d65d0e"),
    },
   gui_colors {
-      QColor (48,  47,  47,  255), /**<  0: qdark ui dark/background color */
-      QColor (80,  80,  80,  255), /**<  1: qdark ui medium/grid color */
-      QColor (170, 170, 170, 255), /**<  2: qdark ui light/text color */
-      QColor (48,  47,  47,  200)  /**<  3: qdark ui dark/background color w/transparency */
+            QColor (48,  47,  47,  255), /**<  0: color oscuro/fondo de UI */
+            QColor (80,  80,  80,  255), /**<  1: color medio/rejilla */
+            QColor (170, 170, 170, 255), /**<  2: color claro/texto */
+            QColor (48,  47,  47,  200)  /**<  3: color oscuro con transparencia */
     },
 
   connected (false),
@@ -99,7 +99,15 @@ MainWindow::MainWindow (QWidget *parent) :
   connect(this, SIGNAL(newData(QStringList)), this, SLOT(onNewDataArrived(QStringList)));
   connect(this, &MainWindow::newData, this, [this](const QStringList &data) {
       if (m_csvManager && ui->actionRecord_stream->isChecked()) {
-          m_csvManager->saveData(data, dataPointNumber);
+          int csvPointNumber = dataPointNumber;
+          if (m_plotManager) {
+              // onNewDataArrived agrega la muestra primero y luego incrementa el contador interno.
+              csvPointNumber = m_plotManager->dataPointCount() - 1;
+              if (csvPointNumber < 0) {
+                  csvPointNumber = 0;
+              }
+          }
+          m_csvManager->saveData(data, csvPointNumber);
       }
   });
   connect(m_serialManager, &SerialPortManager::portOpened, this, &MainWindow::portOpenedSuccess);
@@ -169,7 +177,7 @@ MainWindow::MainWindow (QWidget *parent) :
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Destructor
+ * @brief Destructor.
  */
 
 MainWindow::~MainWindow()
@@ -184,11 +192,11 @@ MainWindow::~MainWindow()
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Create remaining elements and populate the controls
+ * @brief Crea elementos de UI y completa los controles.
  */
 void MainWindow::createUI()
 {
-    /* Check if there are any ports at all; if not, disable controls and return */
+    /* Si no hay puertos disponibles, deshabilita controles y retorna */
     if (QSerialPortInfo::availablePorts().size() == 0)
       {
         enable_com_controls (false);
@@ -197,13 +205,13 @@ void MainWindow::createUI()
         return;
       }
 
-    /* List all available serial ports and populate ports combo box */
+    /* Lista puertos serie disponibles y llena el combo */
     for (QSerialPortInfo port : QSerialPortInfo::availablePorts())
       {
         ui->comboPort->addItem (port.portName());
       }
 
-    /* Populate baud rate combo box with standard rates */
+    /* Llena tasas de baudios estandar */
     ui->comboBaud->addItem ("1200");
     ui->comboBaud->addItem ("2400");
     ui->comboBaud->addItem ("4800");
@@ -212,7 +220,7 @@ void MainWindow::createUI()
     ui->comboBaud->addItem ("38400");
     ui->comboBaud->addItem ("57600");
     ui->comboBaud->addItem ("115200");
-    /* And some not-so-standard */
+    /* Agrega tasas no estandar */
     ui->comboBaud->addItem ("128000");
     ui->comboBaud->addItem ("153600");
     ui->comboBaud->addItem ("230400");
@@ -220,32 +228,29 @@ void MainWindow::createUI()
     ui->comboBaud->addItem ("460800");
     ui->comboBaud->addItem ("921600");
 
-    /* Select 115200 bits by default */
+    /* Selecciona 115200 por defecto */
     ui->comboBaud->setCurrentIndex (7);
 
-    /* Populate data bits combo box */
+    /* Llena combo de bits de datos */
     ui->comboData->addItem ("8 bits");
     ui->comboData->addItem ("7 bits");
 
-    /* Populate parity combo box */
+    /* Llena combo de paridad */
     ui->comboParity->addItem ("none");
     ui->comboParity->addItem ("odd");
     ui->comboParity->addItem ("even");
 
-    /* Populate stop bits combo box */
+    /* Llena combo de bits de parada */
     ui->comboStop->addItem ("1 bit");
     ui->comboStop->addItem ("2 bits");
 
-    /* Initialize the listwidget */
+    /* Inicializa la lista de canales */
     ui->listWidget_Channels->clear();
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Setup the plot area
- */
-/**
- * @brief Setup the plot area (delegated to PlotManager)
+ * @brief Inicializa el area de grafico (delegado en PlotManager).
  */
 void MainWindow::setupPlot()
 {
@@ -256,19 +261,19 @@ void MainWindow::setupPlot()
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Enable/disable COM controls
- * @param enable true enable, false disable
+ * @brief Habilita o deshabilita controles de comunicacion COM.
+ * @param enable true para habilitar, false para deshabilitar
  */
 void MainWindow::enable_com_controls (bool enable)
 {
-  /* Com port properties */
+    /* Propiedades del puerto COM */
   ui->comboBaud->setEnabled (enable);
   ui->comboData->setEnabled (enable);
   ui->comboParity->setEnabled (enable);
   ui->comboPort->setEnabled (enable);
   ui->comboStop->setEnabled (enable);
 
-  /* Toolbar elements */
+    /* Acciones de barra de herramientas */
   ui->actionConnect->setEnabled (enable);
   ui->actionPause_Plot->setEnabled (!enable);
   ui->actionDisconnect->setEnabled (!enable);
@@ -276,7 +281,7 @@ void MainWindow::enable_com_controls (bool enable)
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Open the inside serial port; connect its signals
+ * @brief Abre el puerto serie interno con la configuracion indicada.
  * @param portInfo
  * @param baudRate
  * @param dataBits
@@ -290,7 +295,7 @@ void MainWindow::openPort (QSerialPortInfo portInfo, int baudRate, QSerialPort::
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Slot for closing the port
+ * @brief Maneja el cierre del puerto.
  */
 void MainWindow::onPortClosed()
 {
@@ -305,18 +310,18 @@ void MainWindow::onPortClosed()
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Port Combo Box index changed slot; displays info for selected port when combo box is changed
+ * @brief Muestra informacion del puerto seleccionado al cambiar el combo.
  * @param arg1
  */
 void MainWindow::on_comboPort_currentIndexChanged (const QString &arg1)
 {
-    QSerialPortInfo selectedPort (arg1);                                                   // Dislplay info for selected port
+    QSerialPortInfo selectedPort (arg1);                                                   // Muestra info del puerto seleccionado
     ui->statusBar->showMessage (selectedPort.description());
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Slot for port opened successfully
+ * @brief Maneja la apertura correcta del puerto.
  */
 void MainWindow::portOpenedSuccess()
 {
@@ -365,7 +370,7 @@ void MainWindow::portOpenedSuccess()
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Slot for fail to open the port
+ * @brief Maneja el fallo al abrir el puerto.
  */
 void MainWindow::portOpenedFail()
 {
@@ -375,7 +380,7 @@ void MainWindow::portOpenedFail()
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Replot (delegated to PlotManager)
+ * @brief Repinta el grafico (delegado en PlotManager).
  */
 void MainWindow::replot()
 {
@@ -386,7 +391,7 @@ void MainWindow::replot()
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Slot for new data from serial port . Data is comming in QStringList and needs to be parsed
+ * @brief Procesa nueva data del puerto serie en formato de lista de cadenas.
  * @param newData
  */
 void MainWindow::onNewDataArrived(QStringList newData)
@@ -398,7 +403,7 @@ void MainWindow::onNewDataArrived(QStringList newData)
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Slot for spin box for plot minimum value on y axis
+ * @brief Actualiza el minimo del eje Y.
  * @param arg1
  */
 void MainWindow::on_spinAxesMin_valueChanged(int arg1)
@@ -410,7 +415,7 @@ void MainWindow::on_spinAxesMin_valueChanged(int arg1)
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Slot for spin box for plot maximum value on y axis
+ * @brief Actualiza el maximo del eje Y.
  * @param arg1
  */
 void MainWindow::on_spinAxesMax_valueChanged(int arg1)
@@ -430,7 +435,7 @@ void MainWindow::writeData(const QByteArray &data)
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Spin box for changing the Y Tick step
+ * @brief Ajusta el paso de marcas del eje Y.
  * @param arg1
  */
 void MainWindow::on_spinYStep_valueChanged(int arg1)
@@ -443,7 +448,7 @@ void MainWindow::on_spinYStep_valueChanged(int arg1)
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Save a PNG image of the plot to current EXE directory
+ * @brief Guarda una imagen PNG del grafico.
  */
 void MainWindow::on_savePNGButton_clicked()
 {
@@ -454,7 +459,7 @@ void MainWindow::on_savePNGButton_clicked()
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Prints coordinates of mouse pointer in status bar on mouse release
+ * @brief Muestra coordenadas del puntero sobre el grafico en la barra de estado.
  * @param event
  */
 void MainWindow::onMouseMoveInPlot(QMouseEvent *event)
@@ -466,22 +471,7 @@ void MainWindow::onMouseMoveInPlot(QMouseEvent *event)
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Send plot wheelmouse to spinbox
- * @param event
- */
-void MainWindow::on_mouse_wheel_in_plot (QWheelEvent *event)
-{
-  // PlotManager handles mouse wheel
-  if (m_plotManager) {
-      m_plotManager->onMouseWheel(event);
-  }
-}
-/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
-
-/**
- * @brief Select both line and legend (channel)
- * @param plottable
- * @param event
+ * @brief Sincroniza seleccion entre curva y leyenda (canal).
  */
 void MainWindow::channel_selection (void)
 {
@@ -492,7 +482,7 @@ void MainWindow::channel_selection (void)
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Rename a graph by double clicking on its legend item
+ * @brief Renombra un grafico con doble click en su item de leyenda.
  * @param legend
  * @param item
  */
@@ -505,7 +495,7 @@ void MainWindow::legend_double_click(QCPLegend *legend, QCPAbstractLegendItem *i
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Spin box controls how many data points are collected and displayed
+ * @brief Ajusta cuantos puntos de datos se muestran en pantalla.
  * @param arg1
  */
 void MainWindow::on_spinPoints_valueChanged (int arg1)
@@ -517,7 +507,7 @@ void MainWindow::on_spinPoints_valueChanged (int arg1)
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Shows a window with instructions
+ * @brief Abre la ventana de ayuda.
  */
 void MainWindow::on_actionHow_to_use_triggered()
 {
@@ -529,19 +519,16 @@ void MainWindow::on_actionHow_to_use_triggered()
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Connects to COM port or restarts
- *
- *
- * ting
+ * @brief Conecta al puerto COM o reinicia el ploteo si ya estaba conectado.
  */
 void MainWindow::on_actionConnect_triggered()
 {
   if (connected)
     {
-      /* Is connected, restart if paused */
+            /* Si ya esta conectado, reinicia si estaba pausado */
       if (!plotting)
-        {                                                                                   // Start plotting
-          updateTimer.start();                                                              // Start updating plot timer
+                {                                                                                   // Reinicia ploteo
+                    updateTimer.start();                                                              // Reinicia timer de actualizacion
           plotting = true;
           ui->actionConnect->setEnabled (false);
           ui->actionPause_Plot->setEnabled (true);
@@ -550,18 +537,17 @@ void MainWindow::on_actionConnect_triggered()
     }
   else
     {
-      /* If application is not connected, connect */
-      /* Get parameters from controls first */
-      QSerialPortInfo portInfo (ui->comboPort->currentText());                          // Temporary object, needed to create QSerialPort
-      int baudRate = ui->comboBaud->currentText().toInt();                              // Get baud rate from combo box
-      int dataBitsIndex = ui->comboData->currentIndex();                                // Get index of data bits combo box
-      int parityIndex = ui->comboParity->currentIndex();                                // Get index of parity combo box
-      int stopBitsIndex = ui->comboStop->currentIndex();                                // Get index of stop bits combo box
+    /* Si no esta conectado, toma parametros de UI y conecta */
+    QSerialPortInfo portInfo (ui->comboPort->currentText());                          // Objeto temporal para crear QSerialPort
+    int baudRate = ui->comboBaud->currentText().toInt();                              // Baud rate seleccionado
+    int dataBitsIndex = ui->comboData->currentIndex();                                // Indice de bits de datos
+    int parityIndex = ui->comboParity->currentIndex();                                // Indice de paridad
+    int stopBitsIndex = ui->comboStop->currentIndex();                                // Indice de bits de parada
       QSerialPort::DataBits dataBits;
       QSerialPort::Parity parity;
       QSerialPort::StopBits stopBits;
 
-      /* Set data bits according to the selected index */
+    /* Configura bits de datos segun el indice seleccionado */
       switch (dataBitsIndex)
         {
         case 0:
@@ -571,7 +557,7 @@ void MainWindow::on_actionConnect_triggered()
           dataBits = QSerialPort::Data7;
         }
 
-      /* Set parity according to the selected index */
+    /* Configura paridad segun el indice seleccionado */
       switch (parityIndex)
         {
         case 0:
@@ -584,7 +570,7 @@ void MainWindow::on_actionConnect_triggered()
           parity = QSerialPort::EvenParity;
         }
 
-      /* Set stop bits according to the selected index */
+    /* Configura bits de parada segun el indice seleccionado */
       switch (stopBitsIndex)
         {
         case 0:
@@ -594,20 +580,20 @@ void MainWindow::on_actionConnect_triggered()
           stopBits = QSerialPort::TwoStop;
         }
 
-      /* Open serial port and connect its signals */
+    /* Abre el puerto serie con la configuracion construida */
       openPort (portInfo, baudRate, dataBits, parity, stopBits);
   }
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Keep COM port open but pause plotting
+ * @brief Pausa el ploteo manteniendo abierto el puerto COM.
  */
 void MainWindow::on_actionPause_Plot_triggered()
 {
   if (plotting)
     {
-      updateTimer.stop();                                                               // Stop updating plot timer
+    updateTimer.stop();                                                               // Detiene timer de actualizacion
       plotting = false;
       ui->actionConnect->setEnabled (true);
       ui->actionPause_Plot->setEnabled (false);
@@ -618,7 +604,7 @@ void MainWindow::on_actionPause_Plot_triggered()
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Keep COM port open but pause plotting
+ * @brief Inicia o detiene la grabacion del stream en CSV.
  */
 void MainWindow::on_actionRecord_stream_triggered()
 {
@@ -638,7 +624,7 @@ void MainWindow::on_actionRecord_stream_triggered()
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Closes COM port and stop plotting
+ * @brief Cierra el puerto COM y detiene el ploteo.
  */
 void MainWindow::on_actionDisconnect_triggered()
 {
@@ -670,9 +656,9 @@ void MainWindow::on_actionDisconnect_triggered()
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Clear all channels data and reset plot area
+ * @brief Limpia todos los canales y resetea el area de grafico.
  *
- * This function will not delete the channel itself (legend will stay)
+ * Esta funcion no borra definiciones persistentes de la leyenda.
  */
 void MainWindow::on_actionClear_triggered()
 {
@@ -688,6 +674,7 @@ void MainWindow::on_actionClear_triggered()
 
 void MainWindow::on_pushButton_ShowallData_clicked()
 {
+    // Alterna entre mostrar el flujo crudo completo o solo mensajes filtrados.
     if(ui->pushButton_ShowallData->isChecked())
     {
         filterDisplayedData = false;
@@ -702,6 +689,7 @@ void MainWindow::on_pushButton_ShowallData_clicked()
 
 void MainWindow::on_pushButton_AutoScale_clicked()
 {
+    // Reescala el eje Y segun los datos visibles y actualiza los spinboxes.
     ui->plot->yAxis->rescale(true);
     ui->spinAxesMax->setValue(int(ui->plot->yAxis->range().upper) + int(ui->plot->yAxis->range().upper*0.1));
     ui->spinAxesMin->setValue(int(ui->plot->yAxis->range().lower) + int(ui->plot->yAxis->range().lower*0.1));
@@ -709,6 +697,7 @@ void MainWindow::on_pushButton_AutoScale_clicked()
 
 void MainWindow::on_pushButton_ResetVisible_clicked()
 {
+    // Vuelve a mostrar todos los graficos y limpia el resaltado de la lista.
     for(int i=0; i<ui->plot->graphCount(); i++)
     {
         ui->plot->graph(i)->setVisible(true);
@@ -718,6 +707,7 @@ void MainWindow::on_pushButton_ResetVisible_clicked()
 
 void MainWindow::on_listWidget_Channels_itemDoubleClicked(QListWidgetItem *item)
 {
+    // Alterna visibilidad del canal seleccionado con doble click en la lista.
     int graphIdx = ui->listWidget_Channels->currentRow();
 
     if(ui->plot->graph(graphIdx)->visible())
@@ -735,8 +725,9 @@ void MainWindow::on_listWidget_Channels_itemDoubleClicked(QListWidgetItem *item)
 
 void MainWindow::on_pushButton_clicked()
 {
+    // Recarga la lista de puertos disponibles en el combo de seleccion.
     ui->comboPort->clear();
-    /* List all available serial ports and populate ports combo box */
+    /* Lista puertos disponibles y los agrega al combo */
     for (QSerialPortInfo port : QSerialPortInfo::availablePorts())
     {
         ui->comboPort->addItem (port.portName());
@@ -745,10 +736,12 @@ void MainWindow::on_pushButton_clicked()
 
 void MainWindow::initActionsConnections()
 {
+    // Reservado para conexiones de acciones adicionales del menu/barra.
 }
 
 void MainWindow::on_EnviarDatos_clicked()
 {
+    // Envia al equipo el comando de inicio y el paquete extendido de configuracion.
     if (connected == true)
     {
         cambiarEstado("Enviando (Extendido 48B)...", "green");
@@ -780,6 +773,7 @@ void MainWindow::on_EnviarDatos_clicked()
 }
 void MainWindow::on_ResetearDatos_clicked()
 {
+    // Reinicia estado remoto y local: limpia interfaz y reenvia configuracion base.
     if (connected == true)
     {
         cambiarEstado("RESETEANDO...", "orange");
@@ -811,6 +805,7 @@ void MainWindow::on_ResetearDatos_clicked()
 
 void MainWindow::on_actionEsconder_Caja_de_Texto_toggled(bool arg1)
 {
+    // Muestra u oculta el cuadro de texto de UART segun el estado del toggle.
     if (arg1)
     {
         ui->textEdit_UartWindow->setVisible(false);
@@ -822,18 +817,15 @@ void MainWindow::on_actionEsconder_Caja_de_Texto_toggled(bool arg1)
     }
 }
 
-void MainWindow::on_ir_a_configuracion_clicked()
-{
-    ui->stackedWidget->setCurrentIndex(0);
-}
-
 void MainWindow::on_ir_a_grafico_clicked()
 {
+    // Cambia a la vista de grafico.
     ui->stackedWidget->setCurrentIndex(1);
 }
 
 void MainWindow::on_actionconfig_triggered()
 {
+    // Alterna entre vista de configuracion y vista de grafico.
     if (ui->stackedWidget->currentIndex() == 0)
         ui->stackedWidget->setCurrentIndex(1);
     else
@@ -842,6 +834,7 @@ void MainWindow::on_actionconfig_triggered()
 
 void MainWindow::actualizarMaximoDeTiempo(int nuevoIndice)
 {
+    // Convierte el valor actual entre unidades y ajusta limites validos del spinbox.
     int valorActual = ui->TiempoNum->value();
     quint32 numeroBase = m_fpgaProtocol->convertToBase(valorActual, indiceUnidadAnterior);
     int nuevoValor = m_fpgaProtocol->convertFromBase(numeroBase, nuevoIndice);
@@ -892,6 +885,7 @@ void MainWindow::actualizarMaximoDeTiempo(int nuevoIndice)
     indiceUnidadAnterior = nuevoIndice;
 }
 
+// Propaga cambios de controles de timing hacia la configuracion del protocolo FPGA.
 void MainWindow::on_Ancho_de_pulso_valueChanged(int arg1) { m_fpgaProtocol->setPulseWidth(static_cast<quint8>(arg1)); }
 void MainWindow::on_Delay_A_valueChanged(int arg1)        { m_fpgaProtocol->setDelayA(static_cast<quint8>(arg1)); }
 void MainWindow::on_Delay_B_valueChanged(int arg1)        { m_fpgaProtocol->setDelayB(static_cast<quint8>(arg1)); }
@@ -900,6 +894,7 @@ void MainWindow::on_Delay_D_valueChanged(int arg1)        { m_fpgaProtocol->setD
 
 void MainWindow::actualizarEstadoGraf(int indiceBotonPresionado)
 {
+    // Marca visualmente la columna activa y la comunica al protocolo.
     for (QPushButton* boton : botonesGraf) {
         boton->setStyleSheet("background-color: rgb(150, 50, 50);");
     }
@@ -911,6 +906,7 @@ void MainWindow::actualizarEstadoGraf(int indiceBotonPresionado)
 
 void MainWindow::actualizarBotonDato(int bit, QPushButton* boton)
 {
+    // Alterna un bit de datos y refleja su estado con color en el boton.
     m_fpgaProtocol->toggleButton(bit);
     if (m_fpgaProtocol->buttonState(bit)) {
         boton->setStyleSheet("background-color: rgb(15, 125, 15);"); // Verde
@@ -921,12 +917,14 @@ void MainWindow::actualizarBotonDato(int bit, QPushButton* boton)
 
 void MainWindow::cambiarEstado(QString texto, QString color)
 {
+    // Actualiza el indicador de estado permanente en la barra de estado.
     statusLabel->setText(texto);
     statusLabel->setStyleSheet("color: " + color + "; font-weight: bold;");
 }
 
 void MainWindow::limpiarMatrizInterna()
 {
+    // Resetea matriz en FPGA, colores de botones y columna seleccionada local.
     if (m_fpgaProtocol) {
         m_fpgaProtocol->resetMatrix();
     }
@@ -955,6 +953,7 @@ void MainWindow::limpiarPlot()
 
 QStringList MainWindow::generarLabels()
 {
+    // Expone las etiquetas activas calculadas por el protocolo FPGA.
     return m_fpgaProtocol->generateLabels();
 }
 

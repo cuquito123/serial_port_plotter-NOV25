@@ -1,7 +1,6 @@
 #include "plotmanager.hpp"
 #include "fpgaprotocol.hpp"
 #include <QListWidget>
-#include <QApplication>
 #include <QInputDialog>
 #include <QDebug>
 
@@ -14,6 +13,7 @@ PlotManager::~PlotManager()
 {
 }
 
+// Copia las paletas entregadas por MainWindow para estilo de curvas y UI.
 void PlotManager::setColors(const QColor lineColors[14], const QColor guiColors[4])
 {
     for (int i = 0; i < 14; ++i) {
@@ -28,20 +28,20 @@ void PlotManager::setupPlot()
 {
     if (!m_plot) return;
 
-    /* Remove everything from the plot */
+    /* Limpia elementos existentes del grafico */
     m_plot->clearItems();
 
-    /* Background for the plot area */
+    /* Fondo del area de grafico */
     m_plot->setBackground(m_guiColors[0]);
 
-    /* Used for higher performance (see QCustomPlot real time example) */
+    /* Configuracion para mayor rendimiento en tiempo real */
     m_plot->setNotAntialiasedElements(QCP::aeAll);
     QFont font;
     font.setStyleStrategy(QFont::NoAntialias);
     m_plot->legend->setFont(font);
 
-    /** See QCustomPlot examples / styled demo **/
-    /* X Axis: Style */
+    /** Estilo basado en ejemplos de QCustomPlot **/
+    /* Eje X: estilo */
     m_plot->xAxis->grid()->setPen(QPen(m_guiColors[2], 1, Qt::DotLine));
     m_plot->xAxis->grid()->setSubGridPen(QPen(m_guiColors[1], 1, Qt::DotLine));
     m_plot->xAxis->grid()->setSubGridVisible(true);
@@ -51,10 +51,10 @@ void PlotManager::setupPlot()
     m_plot->xAxis->setUpperEnding(QCPLineEnding::esSpikeArrow);
     m_plot->xAxis->setTickLabelColor(m_guiColors[2]);
     m_plot->xAxis->setTickLabelFont(font);
-    /* Range */
+    /* Rango visible */
     m_plot->xAxis->setRange(m_dataPointNumber - m_visiblePoints, m_dataPointNumber);
 
-    /* Y Axis */
+    /* Eje Y */
     m_plot->yAxis->grid()->setPen(QPen(m_guiColors[2], 1, Qt::DotLine));
     m_plot->yAxis->grid()->setSubGridPen(QPen(m_guiColors[1], 1, Qt::DotLine));
     m_plot->yAxis->grid()->setSubGridVisible(true);
@@ -65,24 +65,25 @@ void PlotManager::setupPlot()
     m_plot->yAxis->setTickLabelColor(m_guiColors[2]);
     m_plot->yAxis->setTickLabelFont(font);
 
-    /* User interactions Drag and Zoom are allowed only on X axis, Y is fixed manually by UI control */
+    /* Drag y zoom solo en X; Y se controla manualmente desde UI */
     m_plot->setInteraction(QCP::iRangeDrag, true);
     m_plot->setInteraction(QCP::iSelectPlottables, true);
     m_plot->setInteraction(QCP::iSelectLegend, true);
     m_plot->axisRect()->setRangeDrag(Qt::Horizontal);
     m_plot->axisRect()->setRangeZoom(Qt::Horizontal);
 
-    /* Legend */
+    /* Leyenda */
     QFont legendFont;
     legendFont.setPointSize(9);
     m_plot->legend->setVisible(true);
     m_plot->legend->setFont(legendFont);
     m_plot->legend->setBrush(m_guiColors[3]);
     m_plot->legend->setBorderPen(m_guiColors[2]);
-    /* By default, the legend is in the inset layout of the main axis rect. So this is how we access it to change legend placement */
+    /* La leyenda vive en el inset del axisRect principal; se ajusta su alineacion */
     m_plot->axisRect()->insetLayout()->setInsetAlignment(0, Qt::AlignTop|Qt::AlignLeft);
 }
 
+// Mantiene una ventana deslizante en X y repinta.
 void PlotManager::replot()
 {
     if (!m_plot) return;
@@ -90,6 +91,7 @@ void PlotManager::replot()
     m_plot->replot();
 }
 
+// Agrega una muestra por cada trama activa mapeada desde el protocolo FPGA.
 void PlotManager::addDataPoint(double x, const QStringList &newData, FpgaProtocol *fpgaProtocol)
 {
     if (!m_plot || !fpgaProtocol) return;
@@ -109,6 +111,7 @@ void PlotManager::addDataPoint(double x, const QStringList &newData, FpgaProtoco
     m_dataPointNumber++;
 }
 
+// Limpia curvas y lista de canales, y reinicia contadores de ploteo.
 void PlotManager::clearPlot()
 {
     if (!m_plot || !m_channelList) return;
@@ -121,6 +124,7 @@ void PlotManager::clearPlot()
     m_plot->replot();
 }
 
+// Crea un grafico por etiqueta y sincroniza color/nombre con la lista.
 void PlotManager::setupGraphsFromLabels(const QStringList &labels)
 {
     if (!m_plot || !m_channelList) return;
@@ -139,6 +143,7 @@ void PlotManager::setupGraphsFromLabels(const QStringList &labels)
     m_plot->replot();
 }
 
+// Convierte posicion de mouse a coordenadas del grafico y emite estado.
 void PlotManager::onMouseMove(QMouseEvent *event)
 {
     if (!m_plot) return;
@@ -150,21 +155,42 @@ void PlotManager::onMouseMove(QMouseEvent *event)
     emit statusChanged(coordinates);
 }
 
+// Reenvia el evento de rueda con delta invertido para mantener sentido de zoom.
 void PlotManager::onMouseWheel(QWheelEvent *event)
 {
-    if (!m_plot) return;
+    if (!m_plot || !event) return;
 
-    QWheelEvent inverted_event = QWheelEvent(event->posF(), event->globalPosF(),
-                                             -event->pixelDelta(), -event->angleDelta(),
-                                             0, Qt::Vertical, event->buttons(), event->modifiers());
-    QApplication::sendEvent(m_plot, &inverted_event);
+    const int deltaY = event->angleDelta().y();
+    if (deltaY == 0) {
+        event->accept();
+        return;
+    }
+
+    // Zoom horizontal centrado en la posicion del cursor, sin reenviar eventos.
+    const double zoomBase = 0.85;
+    const double zoomFactor = (deltaY > 0) ? zoomBase : (1.0 / zoomBase);
+    const double centerX = m_plot->xAxis->pixelToCoord(event->pos().x());
+    const QCPRange current = m_plot->xAxis->range();
+
+    const double lower = centerX - (centerX - current.lower) * zoomFactor;
+    const double upper = centerX + (current.upper - centerX) * zoomFactor;
+
+    if (upper - lower <= 1e-9) {
+        event->accept();
+        return;
+    }
+
+    m_plot->xAxis->setRange(lower, upper);
+    m_plot->replot(QCustomPlot::rpQueuedReplot);
+    event->accept();
 }
 
+// Sincroniza seleccion visual entre curvas y elementos de leyenda.
 void PlotManager::onChannelSelection()
 {
     if (!m_plot) return;
 
-    /* synchronize selection of graphs with selection of corresponding legend items */
+    /* Sincroniza seleccion de curvas con sus items de leyenda */
     for (int i = 0; i < m_plot->graphCount(); i++)
     {
         QCPGraph *graph = m_plot->graph(i);
@@ -180,6 +206,7 @@ void PlotManager::onChannelSelection()
     }
 }
 
+// Permite renombrar un canal al hacer doble click en su item de leyenda.
 void PlotManager::onLegendDoubleClick(QCPLegend *legend, QCPAbstractLegendItem *item, QMouseEvent *event)
 {
     Q_UNUSED(legend)
@@ -187,7 +214,7 @@ void PlotManager::onLegendDoubleClick(QCPLegend *legend, QCPAbstractLegendItem *
 
     if (!m_plot || !m_channelList) return;
 
-    /* Only react if item was clicked (user could have clicked on border padding of legend where there is no item, then item is 0) */
+    /* Solo actua si se hizo click sobre un item valido de leyenda */
     if (item)
     {
         QCPPlottableLegendItem *plItem = qobject_cast<QCPPlottableLegendItem*>(item);
@@ -206,6 +233,7 @@ void PlotManager::onLegendDoubleClick(QCPLegend *legend, QCPAbstractLegendItem *
     }
 }
 
+// Ajusta limite inferior del eje Y desde la UI.
 void PlotManager::onAxesMinChanged(int arg1)
 {
     if (!m_plot) return;
@@ -213,6 +241,7 @@ void PlotManager::onAxesMinChanged(int arg1)
     m_plot->replot();
 }
 
+// Ajusta limite superior del eje Y desde la UI.
 void PlotManager::onAxesMaxChanged(int arg1)
 {
     if (!m_plot) return;
@@ -220,6 +249,7 @@ void PlotManager::onAxesMaxChanged(int arg1)
     m_plot->replot();
 }
 
+// Ajusta cantidad de divisiones principales del eje Y.
 void PlotManager::onYStepChanged(int arg1)
 {
     if (!m_plot) return;
@@ -227,6 +257,7 @@ void PlotManager::onYStepChanged(int arg1)
     m_plot->replot();
 }
 
+// Cambia cantidad de puntos visibles en la ventana temporal de X.
 void PlotManager::onPointsChanged(int arg1)
 {
     Q_UNUSED(arg1)
@@ -236,6 +267,7 @@ void PlotManager::onPointsChanged(int arg1)
     m_plot->replot();
 }
 
+// Guarda captura PNG del plot con resolucion fija de exportacion.
 void PlotManager::savePlotImage()
 {
     if (!m_plot) return;

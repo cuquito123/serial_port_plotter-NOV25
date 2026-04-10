@@ -1,6 +1,7 @@
 #include "serialportmanager.hpp"
 #include <QDebug>
 
+// Constructor: crea el objeto QSerialPort y conecta las señales de lectura y error.
 SerialPortManager::SerialPortManager(QObject *parent)
     : QObject(parent),
       m_serialPort(new QSerialPort(this))
@@ -11,6 +12,8 @@ SerialPortManager::SerialPortManager(QObject *parent)
 
 SerialPortManager::~SerialPortManager() = default;
 
+// Abre el puerto serie con los parámetros dados.
+// Si ya estaba abierto, lo cierra primero para reconfigurarlo.
 bool SerialPortManager::openPort(const QSerialPortInfo &portInfo,
                                 int baudRate,
                                 QSerialPort::DataBits dataBits,
@@ -37,6 +40,7 @@ bool SerialPortManager::openPort(const QSerialPortInfo &portInfo,
     return false;
 }
 
+// Cierra el puerto serie si está abierto y emite portClosed.
 void SerialPortManager::closePort()
 {
     if (m_serialPort->isOpen()) {
@@ -45,6 +49,7 @@ void SerialPortManager::closePort()
     emit portClosed();
 }
 
+// Envía un bloque de datos al puerto serie abierto.
 void SerialPortManager::writeData(const QByteArray &data)
 {
     if (m_serialPort && m_serialPort->isOpen()) {
@@ -52,11 +57,13 @@ void SerialPortManager::writeData(const QByteArray &data)
     }
 }
 
+// Devuelve el puntero al QSerialPort interno.
 QSerialPort *SerialPortManager::serialPort() const
 {
     return m_serialPort;
 }
 
+// Lee todos los bytes disponibles y emite rawDataReady si hay datos.
 void SerialPortManager::handleReadyRead()
 {
     const QByteArray data = m_serialPort->readAll();
@@ -65,6 +72,7 @@ void SerialPortManager::handleReadyRead()
     }
 }
 
+// Maneja errores de puerto serie registrando el mensaje de error.
 void SerialPortManager::handleError(QSerialPort::SerialPortError error)
 {
     if (error != QSerialPort::NoError) {

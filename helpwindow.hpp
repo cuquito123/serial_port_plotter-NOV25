@@ -38,10 +38,13 @@ class HelpWindow : public QDialog
     Q_OBJECT
 
 public:
+    // Constructor de la ventana modal/no modal de ayuda.
     explicit HelpWindow(QWidget *parent = 0);
+    // Destructor: libera recursos de UI generados por Qt Designer.
     ~HelpWindow();
 
 private:
+    // Puntero a la interfaz generada desde helpwindow.ui.
     Ui::HelpWindow *ui;
 };
 

@@ -29,9 +29,10 @@
 
 int main(int argc, char *argv[])
 {
+    // Inicializa la aplicacion Qt con argumentos de linea de comandos.
     QApplication a(argc, argv);
 
-    /* Apply style sheet */
+    /* Aplica la hoja de estilos global si el recurso existe */
     QFile file(":/serial_port_plotter/styles/style.qss");
     if(file.open(QIODevice::ReadOnly | QIODevice::Text))
       {
@@ -39,12 +40,13 @@ int main(int argc, char *argv[])
         file.close();
       }
 
-    /* Get the icon for the window corner */
+    /* Crea la ventana principal y configura icono/titulo */
     MainWindow w;
     QIcon appIcon(":/serial_port_plotter/icons/serial_port_icon.icns");
     w.setWindowIcon(appIcon);
     w.setWindowTitle("Serial Port Plotter v2.3.0");
     w.show();
 
+    // Entra al bucle principal de eventos.
     return a.exec();
 }

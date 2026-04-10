@@ -1,5 +1,7 @@
 #include "fpgaprotocol.hpp"
 
+// Constructor: inicializa el estado de la matriz de teclas y la columna seleccionada.
+// Se llama a resetMatrix() para poner todos los valores en cero.
 FpgaProtocol::FpgaProtocol()
     : m_tecla(32),
       m_selectedColumn(0)
@@ -7,6 +9,8 @@ FpgaProtocol::FpgaProtocol()
     resetMatrix();
 }
 
+// Resetea el estado de la matriz de teclas y la configuración interna.
+// También reinicia la columna seleccionada a la columna 0.
 void FpgaProtocol::resetMatrix()
 {
     m_tecla.fill(false);
@@ -18,6 +22,8 @@ void FpgaProtocol::resetMatrix()
     m_config[4] = 0;
 }
 
+// Selecciona una columna válida entre 0 y 7.
+// Si el índice está fuera de rango, no hace ningún cambio.
 void FpgaProtocol::selectColumn(int columnIndex)
 {
     if (columnIndex >= 0 && columnIndex < 8) {
@@ -25,6 +31,7 @@ void FpgaProtocol::selectColumn(int columnIndex)
     }
 }
 
+// Alterna el estado de un botón en la matriz de teclas si el índice es válido.
 void FpgaProtocol::toggleButton(int bit)
 {
     if (bit >= 0 && bit < m_tecla.size()) {
@@ -32,6 +39,7 @@ void FpgaProtocol::toggleButton(int bit)
     }
 }
 
+// Establece explícitamente el estado de un botón en true o false.
 void FpgaProtocol::setButton(int bit, bool active)
 {
     if (bit >= 0 && bit < m_tecla.size()) {
@@ -39,6 +47,7 @@ void FpgaProtocol::setButton(int bit, bool active)
     }
 }
 
+// Devuelve el estado actual de un botón. Si el índice no es válido, retorna false.
 bool FpgaProtocol::buttonState(int bit) const
 {
     if (bit >= 0 && bit < m_tecla.size()) {
@@ -47,31 +56,38 @@ bool FpgaProtocol::buttonState(int bit) const
     return false;
 }
 
+// Ajusta el ancho de pulso en la configuración interna.
 void FpgaProtocol::setPulseWidth(quint8 value)
 {
     m_config[0] = value;
 }
 
+// Ajusta el retardo A en la configuración interna.
 void FpgaProtocol::setDelayA(quint8 value)
 {
     m_config[1] = value;
 }
 
+// Ajusta el retardo B en la configuración interna.
 void FpgaProtocol::setDelayB(quint8 value)
 {
     m_config[2] = value;
 }
 
+// Ajusta el retardo C en la configuración interna.
 void FpgaProtocol::setDelayC(quint8 value)
 {
     m_config[3] = value;
 }
 
+// Ajusta el retardo D en la configuración interna.
 void FpgaProtocol::setDelayD(quint8 value)
 {
     m_config[4] = value;
 }
 
+// Genera etiquetas de columnas activas con los identificadores A/B/C/D.
+// Omite las columnas que no tienen ningún botón activo.
 QStringList FpgaProtocol::generateLabels() const
 {
     QStringList labels;
@@ -97,6 +113,8 @@ QStringList FpgaProtocol::generateLabels() const
     return labels;
 }
 
+// Devuelve los índices de trama activos según las columnas que contienen al menos un botón activo.
+// El índice se calcula como 7 - col para mantener el orden de tramas esperado.
 QVector<int> FpgaProtocol::activeTramaIndices() const
 {
     QVector<int> indices;
@@ -113,6 +131,8 @@ QVector<int> FpgaProtocol::activeTramaIndices() const
     return indices;
 }
 
+// Llena los vectores de mapeo CSV con el índice de trama y la etiqueta por columna.
+// Para columnas inactivas deja etiqueta vacía y -1 como índice.
 void FpgaProtocol::fillCsvMapping(QVector<int> &csvTramaIdx, QStringList &csvLabels) const
 {
     csvTramaIdx.clear();
@@ -137,6 +157,11 @@ void FpgaProtocol::fillCsvMapping(QVector<int> &csvTramaIdx, QStringList &csvLab
     }
 }
 
+// Construye un paquete extendido de 47 bytes que contiene:
+// - estado de los 32 botones
+// - configuración de 5 bytes
+// - estado y número de columna seleccionada
+// - el tiempo normalizado en formato ASCII de 8 dígitos.
 QByteArray FpgaProtocol::buildExtendedPacket(quint32 timeValue, int timeUnitIndex) const
 {
     quint32 baseTime = convertToBase(static_cast<int>(timeValue), timeUnitIndex);
@@ -160,6 +185,7 @@ QByteArray FpgaProtocol::buildExtendedPacket(quint32 timeValue, int timeUnitInde
     return packet;
 }
 
+// Construye un paquete de reinicio de barrido (reset sweep) de 38 bytes con la configuración actual.
 QByteArray FpgaProtocol::buildResetSweepPacket() const
 {
     QByteArray packet(38, 0);
@@ -169,16 +195,20 @@ QByteArray FpgaProtocol::buildResetSweepPacket() const
     return packet;
 }
 
+// Comando de reinicio simple de un byte.
 QByteArray FpgaProtocol::buildResetCommand() const
 {
     return QByteArray(1, char(0x5F));
 }
 
+// Comando de inicio simple de un byte.
 QByteArray FpgaProtocol::buildStartCommand() const
 {
     return QByteArray(1, char(0x23));
 }
 
+// Convierte un valor de tiempo desde una unidad seleccionada a la unidad base interna.
+// Las unidades pueden ser: 0=µs, 1=ms, 2=s, 3=min, 4=hs.
 quint32 FpgaProtocol::convertToBase(int valor, int indiceUnidad) const
 {
     quint64 calculo = 0;
@@ -205,6 +235,7 @@ quint32 FpgaProtocol::convertToBase(int valor, int indiceUnidad) const
     return static_cast<quint32>(calculo);
 }
 
+// Convierte un valor de la unidad base interna a la unidad seleccionada.
 quint32 FpgaProtocol::convertFromBase(quint32 numeroBase, int indiceUnidad) const
 {
     switch (indiceUnidad) {
@@ -217,6 +248,8 @@ quint32 FpgaProtocol::convertFromBase(quint32 numeroBase, int indiceUnidad) cons
     }
 }
 
+// Normaliza el valor de tiempo para que sea múltiplo de 8.
+// Esto asegura compatibilidad con la trama de tiempo esperada.
 quint32 FpgaProtocol::normalizeTimeValue(quint32 timeValue) const
 {
     quint32 remainder = timeValue % 8;
@@ -226,6 +259,7 @@ quint32 FpgaProtocol::normalizeTimeValue(quint32 timeValue) const
     return timeValue;
 }
 
+// Descompone un número en 8 dígitos ASCII, rellenando con ceros a la izquierda.
 QVector<quint8> FpgaProtocol::decomposeNumber(quint32 numero) const
 {
     QVector<quint8> digitos(8, '0');
@@ -239,6 +273,7 @@ QVector<quint8> FpgaProtocol::decomposeNumber(quint32 numero) const
     return digitos;
 }
 
+// Construye el estado de una columna en un byte de 4 bits con el orden D C B A.
 quint8 FpgaProtocol::buildColumnState(int columnIndex) const
 {
     if (columnIndex < 0 || columnIndex > 7) {

@@ -31,10 +31,12 @@ HelpWindow::HelpWindow(QWidget *parent) :
     QDialog(parent),
     ui(new Ui::HelpWindow)
 {
+    // Inicializa los widgets definidos en el archivo .ui.
     ui->setupUi(this);
 }
 
 HelpWindow::~HelpWindow()
 {
+    // Libera la instancia de interfaz creada en el constructor.
     delete ui;
 }

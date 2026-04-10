@@ -65,23 +65,22 @@ public:
     ~MainWindow();
 
 private slots:
-    void on_comboPort_currentIndexChanged(const QString &arg1);                           // Slot displays message on status bar
-    void portOpenedSuccess();                                                             // Called when port opens OK
-    void portOpenedFail();                                                                // Called when port fails to open
-    void onPortClosed();                                                                  // Called when closing the port
-    void replot();                                                                        // Slot for repainting the plot
-    void onNewDataArrived(QStringList newData);                                           // Slot for new data from serial port
-    void on_spinAxesMin_valueChanged(int arg1);                                           // Changing lower limit for the plot
-    void on_spinAxesMax_valueChanged(int arg1);                                           // Changing upper limit for the plot
-    void writeData(const QByteArray &data);                                               // Slot for outside serial port
-    //void on_comboAxes_currentIndexChanged(int index);                                     // Display number of axes and colors in status bar
-    void on_spinYStep_valueChanged(int arg1);                                             // Spin box for changing Y axis tick step
-    void on_savePNGButton_clicked();                                                      // Button for saving JPG
-    void onMouseMoveInPlot (QMouseEvent *event);                                          // Displays coordinates of mouse pointer when clicked in plot in status bar
-    void on_spinPoints_valueChanged (int arg1);                                           // Spin box controls how many data points are collected and displayed
-    void on_mouse_wheel_in_plot (QWheelEvent *event);                                     // Makes wheel mouse works while plotting
+    void on_comboPort_currentIndexChanged(const QString &arg1);                           // Muestra informacion del puerto seleccionado en la barra de estado
+    void portOpenedSuccess();                                                             // Maneja la apertura correcta del puerto
+    void portOpenedFail();                                                                // Maneja el fallo de apertura del puerto
+    void onPortClosed();                                                                  // Maneja el cierre del puerto
+    void replot();                                                                        // Solicita el repintado del grafico
+    void onNewDataArrived(QStringList newData);                                           // Procesa nueva data parseada desde el puerto serie
+    void on_spinAxesMin_valueChanged(int arg1);                                           // Actualiza limite inferior del eje Y
+    void on_spinAxesMax_valueChanged(int arg1);                                           // Actualiza limite superior del eje Y
+    void writeData(const QByteArray &data);                                               // Reenvia datos a traves del gestor serie
+    //void on_comboAxes_currentIndexChanged(int index);                                     // Muestra cantidad de ejes y colores en la barra de estado
+    void on_spinYStep_valueChanged(int arg1);                                             // Ajusta el paso de marcas del eje Y
+    void on_savePNGButton_clicked();                                                      // Guarda una imagen del grafico
+    void onMouseMoveInPlot (QMouseEvent *event);                                          // Actualiza coordenadas del mouse sobre el grafico
+    void on_spinPoints_valueChanged (int arg1);                                           // Cambia la cantidad de puntos visibles en el grafico
 
-    /* Used when a channel is selected (plot or legend) */
+    /* Seleccion de canal desde grafico o leyenda */
     void channel_selection (void);
     void legend_double_click (QCPLegend *legend, QCPAbstractLegendItem *item, QMouseEvent *event);
 
@@ -108,8 +107,6 @@ private slots:
 
     void on_actionEsconder_Caja_de_Texto_toggled(bool arg1);
 
-    void on_ir_a_configuracion_clicked();
-
     void on_ir_a_grafico_clicked();
 
 //    void on_actionProperty_toggled(bool arg1);
@@ -128,57 +125,57 @@ private slots:
     void on_ResetearDatos_clicked();
 
 
-    // Slot para manejar el cambio de unidad y límites
-        void actualizarMaximoDeTiempo(int index);
-    // Slots para los 5 parámetros de configuración (llenado en tiempo real)
-        void on_Ancho_de_pulso_valueChanged(int arg1);
-        void on_Delay_A_valueChanged(int arg1);
-        void on_Delay_B_valueChanged(int arg1);
-        void on_Delay_C_valueChanged(int arg1);
-        void on_Delay_D_valueChanged(int arg1);
-    //funcion para el StatusLabel
-        void cambiarEstado(QString texto, QString color);
-        // funcion para redefinir tecla cuando se apreta reset y pausa
-        void limpiarMatrizInterna();
+    // Recalcula limites validos de TiempoNum al cambiar unidad y conserva escala equivalente.
+    void actualizarMaximoDeTiempo(int index);
+    // Actualizan en tiempo real los 5 parametros de configuracion del protocolo.
+    void on_Ancho_de_pulso_valueChanged(int arg1);
+    void on_Delay_A_valueChanged(int arg1);
+    void on_Delay_B_valueChanged(int arg1);
+    void on_Delay_C_valueChanged(int arg1);
+    void on_Delay_D_valueChanged(int arg1);
+    // Actualiza el texto y color del indicador de estado.
+    void cambiarEstado(QString texto, QString color);
+    // Limpia el estado interno de la matriz y los controles asociados.
+    void limpiarMatrizInterna();
 signals:
-    void portOpenFail();                                                                  // Emitted when cannot open port
-    void portOpenOK();                                                                    // Emitted when port is open
-    void portClosed();                                                                    // Emitted when port is closed
-    void newData(QStringList data);                                                       // Emitted when new data has arrived
+    void portOpenFail();                                                                  // Emitida cuando no se puede abrir el puerto
+    void portOpenOK();                                                                    // Emitida cuando el puerto queda abierto
+    void portClosed();                                                                    // Emitida cuando el puerto se cierra
+    void newData(QStringList data);                                                       // Emitida al recibir una trama parseada
 
 private:
     Ui::MainWindow *ui;
 
-    /* Indicador de estado */
+    /* Indicador visual de estado en la barra inferior */
     QLabel *statusLabel;
 
-    /* Line colors */
+    /* Paleta de lineas y colores base de UI */
     QColor line_colors[CUSTOM_LINE_COLORS];
     QColor gui_colors[GCP_CUSTOM_LINE_COLORS];
 
-    /* Main info */
-    bool connected;                                                                       // Status connection variable
+    /* Estado principal de la aplicacion */
+    bool connected;                                                                       // Estado de conexion serie
     bool enviar;
     bool Preparado;
     bool triggered;
     bool toggled;
-    bool plotting;                                                                        // Status plotting variable
+    bool plotting;                                                                        // Estado de ploteo en tiempo real
     bool arg4 = 0;
     bool arg1 = 1;
     bool arg2 = 0;
    //int dim = 32;
 
-    int dataPointNumber;                                                                  // Keep track of data points
-    /* Channels of data (number of graphs) */
+    int dataPointNumber;                                                                  // Contador de puntos acumulados
+    /* Cantidad de canales/graficos activos */
     int channels;
 
-    /* Data format */
+    /* Formato de datos de entrada */
     int data_format;   
 
-    /* Textbox Related */
+    /* Configuracion de visualizacion de texto UART */
     bool filterDisplayedData = true;
 
-    /* Listview Related */
+    /* Estado del listado de canales */
     QStringListModel *channelListModel;
     QStringList     channelStrList;
 
@@ -186,32 +183,32 @@ private:
 
    // QAction *guardarCSVAction;  // Declaración del botón en la barra de menú
 
-    QTimer updateTimer;                                                                   // Timer used for replotting the plot
-    QTime timeOfFirstData;                                                                // Record the time of the first data point
-    double timeBetweenSamples;                                                            // Store time between samples
-    QString receivedData;                                                                 // Used for reading from the port
+    QTimer updateTimer;                                                                   // Temporizador de refresco del grafico
+    QTime timeOfFirstData;                                                                // Marca temporal del primer dato recibido
+    double timeBetweenSamples;                                                            // Intervalo estimado entre muestras
+    QString receivedData;                                                                 // Buffer de texto para UART
     HelpWindow *helpWindow;
-    void createUI();                                                                      // Populate the controls
-    void enable_com_controls (bool enable);                                               // Enable/disable controls
-    void setupPlot();                                                                     // Setup the QCustomPlot
-                                                                                          // Open the inside serial port with these parameters
+    void createUI();                                                                      // Inicializa y rellena controles de UI
+    void enable_com_controls (bool enable);                                               // Habilita/deshabilita controles de COM
+    void setupPlot();                                                                     // Inicializa el area de grafico
+                                                                                          // Abre el puerto serie interno con estos parametros
     void openPort(QSerialPortInfo portInfo, int baudRate, QSerialPort::DataBits dataBits, QSerialPort::Parity parity, QSerialPort::StopBits stopBits);
     Console *m_console = nullptr;
 
-    // Vectores para manejo de botones (para las conexiones con lambdas)
-        QVector<QPushButton*> botonesGraf;
-        QVector<QPushButton*> botonesDatos;
-    // Estado del sistema
-        int columnaSeleccionada;
+    // Vectores de botones para columna de grafico y matriz de datos.
+    QVector<QPushButton*> botonesGraf;
+    QVector<QPushButton*> botonesDatos;
+    // Columna actualmente seleccionada para enviar al protocolo.
+    int columnaSeleccionada;
 
-   // --- DECLARACIONES DE FUNCIONES LÓGICAS ---
-        void actualizarEstadoGraf(int indiceBotonPresionado);
-        void actualizarBotonDato(int bit, QPushButton* boton);
-        void limpiarPlot();
-        QStringList generarLabels();
+    // Funciones auxiliares de logica de UI/protocolo.
+    void actualizarEstadoGraf(int indiceBotonPresionado);
+    void actualizarBotonDato(int bit, QPushButton* boton);
+    void limpiarPlot();
+    QStringList generarLabels();
 
-   // Variable de memoria para la conversión de unidades
-            int indiceUnidadAnterior;
+    // Ultima unidad de tiempo usada para conversion entre indices.
+    int indiceUnidadAnterior;
 
     void initActionsConnections();
     SerialPortManager *m_serialManager = nullptr;

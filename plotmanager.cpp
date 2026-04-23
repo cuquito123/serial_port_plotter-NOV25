@@ -1,5 +1,4 @@
 #include "plotmanager.hpp"
-#include "fpgaprotocol.hpp"
 #include <QListWidget>
 #include <QInputDialog>
 #include <QDebug>
@@ -91,19 +90,24 @@ void PlotManager::replot()
     m_plot->replot();
 }
 
-// Agrega una muestra por cada trama activa mapeada desde el protocolo FPGA.
-void PlotManager::addDataPoint(double x, const QStringList &newData, FpgaProtocol *fpgaProtocol)
+// Define el mapeo fijo trama->grafico usado durante la adquisicion activa.
+void PlotManager::setActiveTramaIndices(const QVector<int> &indices)
 {
-    if (!m_plot || !fpgaProtocol) return;
+    m_activeTramaIndices = indices;
+}
 
-    QVector<int> tramaIndices = fpgaProtocol->activeTramaIndices();
-    if (tramaIndices.isEmpty()) return;
+// Agrega una muestra usando el mapeo fijo de tramas configurado al iniciar.
+void PlotManager::addDataPoint(double x, const QStringList &newData)
+{
+    if (!m_plot) return;
 
-    for (int grafico = 0; grafico < tramaIndices.size(); grafico++)
+    if (m_activeTramaIndices.isEmpty()) return;
+
+    const int count = qMin(m_activeTramaIndices.size(), m_plot->graphCount());
+    for (int grafico = 0; grafico < count; grafico++)
     {
-        int tramIdx = tramaIndices[grafico];
-        if (tramIdx >= newData.size()) continue;
-        if (grafico >= m_plot->graphCount()) break;
+        const int tramIdx = m_activeTramaIndices[grafico];
+        if (tramIdx < 0 || tramIdx >= newData.size()) continue;
 
         m_plot->graph(grafico)->addData(x, newData[tramIdx].toDouble());
     }
@@ -120,6 +124,7 @@ void PlotManager::clearPlot()
     m_channelList->clear();
     m_channels = 0;
     m_dataPointNumber = 0;
+    m_activeTramaIndices.clear();
     setupPlot();
     m_plot->replot();
 }

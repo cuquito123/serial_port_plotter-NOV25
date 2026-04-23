@@ -398,7 +398,7 @@ void MainWindow::onNewDataArrived(QStringList newData)
 {
     if (!plotting || !m_plotManager) return;
 
-    m_plotManager->addDataPoint(m_plotManager->dataPointCount(), newData, m_fpgaProtocol);
+    m_plotManager->addDataPoint(m_plotManager->dataPointCount(), newData);
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -748,7 +748,9 @@ void MainWindow::on_EnviarDatos_clicked()
 
         limpiarPlot();
         QStringList labels = m_fpgaProtocol->generateLabels();
+        QVector<int> tramaIndices = m_fpgaProtocol->activeTramaIndices();
         if (m_plotManager) {
+            m_plotManager->setActiveTramaIndices(tramaIndices);
             m_plotManager->setupGraphsFromLabels(labels);
             channels = m_plotManager->channelCount();
         }

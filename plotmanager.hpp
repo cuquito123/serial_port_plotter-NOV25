@@ -25,9 +25,10 @@ public:
     void setColors(const QColor lineColors[14], const QColor guiColors[4]);
 
     // Gestión de datos
-    void addDataPoint(double x, const QStringList &newData, FpgaProtocol *fpgaProtocol);
+    void addDataPoint(double x, const QStringList &newData);
     void clearPlot();
     void setupGraphsFromLabels(const QStringList &labels);
+    void setActiveTramaIndices(const QVector<int> &indices);
 
     // Acceso a propiedades
     // Cantidad total de puntos incorporados al grafico.
@@ -76,6 +77,9 @@ private:
     int m_dataPointNumber = 0;
     int m_channels = 0;
     int m_visiblePoints = 100;
+
+    // Mapeo fijo de indice de trama por grafico, tomado al iniciar adquisicion.
+    QVector<int> m_activeTramaIndices;
 };
 
 #endif // PLOTMANAGER_HPP

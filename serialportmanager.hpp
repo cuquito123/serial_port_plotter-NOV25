@@ -35,6 +35,9 @@ signals:
     void portOpenFailed();
     void portClosed();
     void rawDataReady(const QByteArray &data);
+    // Señales para monitorear resultados de escritura
+    void writeSucceeded(qint64 bytesWritten);
+    void writeFailed(const QString &errorString);
 
 private slots:
     // Slot invocado cuando hay datos disponibles para leer.

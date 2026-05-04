@@ -69,6 +69,14 @@ public:
     // Convierte un valor de la unidad base interna a la unidad seleccionada.
     quint32 convertFromBase(quint32 numeroBase, int indiceUnidad) const;
 
+    // Getters para lectura de estado (necesarios para perfiles)
+    QBitArray getTecla() const { return m_tecla; }
+    quint8 getPulseWidth() const { return m_config[0]; }
+    quint8 getDelayA() const { return m_config[1]; }
+    quint8 getDelayB() const { return m_config[2]; }
+    quint8 getDelayC() const { return m_config[3]; }
+    quint8 getDelayD() const { return m_config[4]; }
+
 private:
     // Normaliza el tiempo a un múltiplo de 8.
     quint32 normalizeTimeValue(quint32 timeValue) const;

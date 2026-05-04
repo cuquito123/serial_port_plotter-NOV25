@@ -34,6 +34,56 @@ Double click on a channel in the Graph Control panel to hide/show a specific cha
 
 ![File Save Button](res/screen_1.png)
 
+## Serial Port Plotter NOV25
+
+Esta versión reorganiza la ventana principal alrededor de una máquina de estados operativa, agrega validación previa antes de aplicar la configuración al FPGA y suma trazabilidad, telemetría y perfiles operativos. El flujo general pasa de una UI reactiva a un ciclo más controlado entre configuración, aplicación y adquisición.
+
+### 1. Cambios estructurales
+
+La arquitectura interna de MainWindow ahora incorpora estado operativo explícito, verificación previa y módulos auxiliares para seguimiento y persistencia. La lógica ya no depende solo de botones sueltos, sino de transiciones controladas entre estados.
+
+- Se agregó el enum class AppState en [mainwindow.hpp](mainwindow.hpp) con los estados Disconnected, ReadyForConfiguration, ReadyForExecution, Acquiring, Paused y Fault.
+- Se agregaron los métodos setAppState(), currentAppState(), getStateDisplayName(), updateUIForState() y canTransitionToState() para gobernar el flujo de la ventana principal.
+- Se incorporó la estructura PreflightResult junto con performPreflightCheck() para validar el puerto, los canales activos, el tiempo configurado y el estado de la grabación CSV antes de enviar la configuración.
+- Se sumaron los bloques HealthMetrics, ConnectionParams, EventType, OperativeEvent y OperativeProfile para telemetría, recuperación, logging y perfiles.
+- El constructor de MainWindow ahora conecta SerialPortManager, SerialMessageParser, PlotManager y CsvManager en una cadena de procesamiento clara: recepción cruda, parseo, nueva data, ploteo y guardado.
+- Se añadieron helpers de estado local como markPendingChanges(), clearPendingChanges(), updatePendingChangesIndicator(), limpiarMatrizInterna() y limpiarPlot().
+
+### 2. Cambios visuales y de UI
+
+La interfaz quedó más segmentada y explícita. La pantalla principal separa mejor la configuración del gráfico y expone controles visuales para tiempo, matriz, canales y puerto.
+
+- Se usa un QStackedWidget llamado stackedWidget para alternar entre la vista de configuración y la vista de gráfico.
+- Se reorganizaron los controles en dos bloques visibles: PlotControlsBox y Port Controls.
+- Se agregaron o conservaron widgets de configuración directa como TiempoBox, TiempoNum, EnviarDatos, ResetearDatos, Ancho_de_pulso, Delay_A, Delay_B, Delay_C y Delay_D.
+- Se mantiene la matriz de selección con botones GRAF_1 a GRAF_8 y A1_0 a D8_31, que ahora se colorean según su estado.
+- Se incorporó listWidget_Channels como panel de canales visibles, con acciones asociadas para AutoScale, Reset Visible y Show All Incoming Data.
+- actionRecord_stream sigue presente en la barra superior, y el botón EnviarDatos cambia visualmente cuando hay cambios pendientes de aplicar.
+
+### 3. Cambios en poderes del usuario
+
+El usuario dispone ahora de un flujo operativo más guiado. La aplicación diferencia entre configurar, aplicar, ejecutar, pausar y desconectar, y habilita cada acción según el estado real de la sesión.
+
+- El usuario puede configurar matriz y tiempos antes de aplicar la configuración con on_EnviarDatos_clicked().
+- El usuario debe pasar por Conectar para iniciar la adquisición después de haber enviado la configuración, en lugar de iniciar la ejecución directamente.
+- El usuario puede pausar la adquisición con on_actionPause_Plot_triggered() sin cerrar el puerto serie.
+- El usuario puede volver a conectar o reanudar desde el estado Paused, sujeto a la validación de performPreflightCheck().
+- El usuario puede ocultar o mostrar el texto UART con actionEsconder_Caja_de_Texto y alternar entre la vista de configuración y la del gráfico con actionconfig u on_ir_a_grafico_clicked().
+- El usuario puede controlar la visualización de canales con on_listWidget_Channels_itemDoubleClicked(), on_pushButton_ResetVisible_clicked() y on_pushButton_ShowallData_clicked().
+- La grabación CSV con actionRecord_stream queda condicionada al estado de adquisición o pausa, y se detiene al desconectar o cerrar el archivo.
+
+### 4. Cambios en el comportamiento del sistema
+
+El comportamiento interno ahora cubre más que recepción y ploteo: también valida, registra, recupera y persiste el estado operativo. El envío al FPGA, la grabación CSV y el mapeo de gráficos quedaron más controlados.
+
+- La recepción serial sigue el flujo SerialPortManager -> SerialMessageParser -> newData(QStringList) -> onNewDataArrived(), y el texto UART se muestra o filtra según filterDisplayedData.
+- onNewDataArrived() actualiza HealthMetrics con updateHealthMetrics() antes de enviar la muestra al PlotManager.
+- on_EnviarDatos_clicked() realiza un preflight, limpia el gráfico, genera etiquetas con FpgaProtocol::generateLabels(), fija el mapeo activo con PlotManager::setActiveTramaIndices() y envía buildStartCommand() más buildExtendedPacket().
+- on_ResetearDatos_clicked() envía buildResetCommand() y buildResetSweepPacket(), además de limpiar la matriz local y el texto UART.
+- El guardado CSV usa CsvManager::saveData() y toma el índice de punto desde el contador real del plot, de modo que la grabación acompaña la secuencia visual.
+- Se agregó trazabilidad operativa con logEvent(), getEventLogAsString() y exportEventLog(), registrando eventos como PortOpened, PortClosed, Started, Stopped, ConfigApplied, Reset, Recovery y Error.
+- Se incorporó persistencia de perfiles con saveProfile(), loadProfile(), deleteProfile(), getProfileNames() y getProfilesDirectory(), usando OperativeProfile::toJson() y OperativeProfile::fromJson() para serializar la configuración completa.
+
 ## Send data over the serial port
 
 ```c

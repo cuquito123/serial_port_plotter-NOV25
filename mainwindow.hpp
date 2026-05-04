@@ -35,6 +35,16 @@
 #include <QBitArray>
 #include <QVector>
 
+// Máquina de estados operativa de la aplicación
+enum class AppState {
+    Disconnected,             // Desconectado: puerto cerrado, sin comunicación
+    ReadyForConfiguration,    // Listo para configurar: puerto abierto, sin adquisición
+    ReadyForExecution,        // Listo para ejecutar: config enviada al FPGA, sin adquisición aún
+    Acquiring,                // Adquiriendo: toma de datos activa
+    Paused,                   // Pausado: comunicación detenida durante adquisición
+    Fault                     // Falla: error detectado, requiere recuperación
+};
+
 #define START_MSG       '$'
 #define END_MSG         ';'
 
@@ -137,6 +147,14 @@ private slots:
     void cambiarEstado(QString texto, QString color);
     // Limpia el estado interno de la matriz y los controles asociados.
     void limpiarMatrizInterna();
+    
+    // Gestión de máquina de estados operativa
+    void setAppState(AppState newState);
+    AppState currentAppState() const { return m_appState; }
+    QString getStateDisplayName(AppState state) const;
+    void updateUIForState();
+    bool canTransitionToState(AppState newState) const;
+
 signals:
     void portOpenFail();                                                                  // Emitida cuando no se puede abrir el puerto
     void portOpenOK();                                                                    // Emitida cuando el puerto queda abierto
@@ -216,6 +234,120 @@ private:
     FpgaProtocol *m_fpgaProtocol = nullptr;
     PlotManager *m_plotManager = nullptr;
     CsvManager *m_csvManager = nullptr;
+
+    // Tracking de cambios pendientes: config local vs config aplicada al FPGA
+    bool m_hasPendingChanges = false;
+    FpgaProtocol *m_fpgaProtocolApplied = nullptr; // Snapshot de config aplicada al FPGA
+
+    // Métodos para gestión de cambios
+    void markPendingChanges();
+    void clearPendingChanges();
+    bool hasPendingChanges() const { return m_hasPendingChanges; }
+    
+    // Preflight check antes de ejecutar
+    struct PreflightResult {
+        bool success = false;
+        QString errorMessage;
+    };
+    PreflightResult performPreflightCheck();
+    void updatePendingChangesIndicator();
+
+    // Estado operativo de la máquina de estados
+    AppState m_appState = AppState::Disconnected;
+
+    // ─── Telemetría de Salud en Tiempo Real ───────────────────────────────────────
+    struct HealthMetrics {
+        quint64 validPacketCount = 0;      // Paquetes parseados correctamente
+        quint64 invalidPacketCount = 0;    // Paquetes con error de formato
+        quint64 lostPacketCount = 0;       // Paquetes perdidos estimados
+        qint64 lastPacketTimestampMs = 0;  // Timestamp (ms) del último paquete recibido
+        float frameLatencyMs = 0.0f;        // Latencia estimada de trama en ms
+        qint64 firstPacketTime = 0;        // Marca temporal del primer paquete para calcular estadísticas
+    };
+    
+    HealthMetrics m_healthMetrics;
+    void updateHealthMetrics(const QStringList &newData);
+    void resetHealthMetrics();
+    QString getHealthMetricsString() const;
+
+    // ─── Recuperación Guiada ante Fallos ───────────────────────────────────────────
+    void attemptRecovery();
+    bool isRecoveryPossible() const;
+    
+    // Almacena parámetros actuales de conexión para recuperación
+    struct ConnectionParams {
+        QSerialPortInfo portInfo;
+        int baudRate = 115200;
+        QSerialPort::DataBits dataBits = QSerialPort::Data8;
+        QSerialPort::Parity parity = QSerialPort::NoParity;
+        QSerialPort::StopBits stopBits = QSerialPort::OneStop;
+    };
+    ConnectionParams m_lastConnectionParams;
+
+    // ─── Trazabilidad Operativa (Event Logging) ───────────────────────────────────
+    enum class EventType {
+        Started,        // Adquisición iniciada
+        Stopped,        // Adquisición detenida
+        ConfigApplied,  // Configuración aplicada al FPGA
+        Error,          // Error ocurrido
+        Reset,          // Reset ejecutado
+        Recovery,       // Intento de recuperación
+        PortOpened,     // Puerto abierto
+        PortClosed      // Puerto cerrado
+    };
+
+    struct OperativeEvent {
+        qint64 timestampMs;
+        EventType eventType;
+        QString description;
+        
+        QString toString() const {
+            QDateTime dt = QDateTime::fromMSecsSinceEpoch(timestampMs);
+            QString typeStr;
+            switch (eventType) {
+                case EventType::Started: typeStr = "STARTED"; break;
+                case EventType::Stopped: typeStr = "STOPPED"; break;
+                case EventType::ConfigApplied: typeStr = "CONFIG_APPLIED"; break;
+                case EventType::Error: typeStr = "ERROR"; break;
+                case EventType::Reset: typeStr = "RESET"; break;
+                case EventType::Recovery: typeStr = "RECOVERY"; break;
+                case EventType::PortOpened: typeStr = "PORT_OPENED"; break;
+                case EventType::PortClosed: typeStr = "PORT_CLOSED"; break;
+            }
+            return QString("[%1] %2: %3").arg(dt.toString("HH:mm:ss.zzz"), typeStr, description);
+        }
+    };
+    
+    QList<OperativeEvent> m_eventLog;
+    static constexpr int MAX_LOG_ENTRIES = 1000;
+    
+    void logEvent(EventType type, const QString &description);
+    QString getEventLogAsString(int maxEntries = 50) const;
+    void clearEventLog();
+    void exportEventLog(const QString &filePath);
+
+    // ─── Perfiles Operativos (Config Profiles) ────────────────────────────────────
+    struct OperativeProfile {
+        QString name;
+        QBitArray matrixButtons;           // Estado de 32 botones
+        quint8 pulseWidth;
+        quint8 delayA, delayB, delayC, delayD;
+        int timeValue;
+        int timeUnitIndex;
+        qint64 createdTimestamp;
+        
+        // Serialización a JSON para guardar
+        QString toJson() const;
+        static OperativeProfile fromJson(const QString &json);
+    };
+    
+    QList<OperativeProfile> m_savedProfiles;
+    
+    void saveProfile(const QString &profileName);
+    void loadProfile(const QString &profileName);
+    void deleteProfile(const QString &profileName);
+    QStringList getProfileNames() const;
+    QString getProfilesDirectory() const;
 
 };
 

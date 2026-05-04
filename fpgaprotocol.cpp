@@ -264,9 +264,6 @@ QVector<quint8> FpgaProtocol::decomposeNumber(quint32 numero) const
 {
     QVector<quint8> digitos(8, '0');
     for (int i = 7; i >= 0; --i) {
-        if (numero == 0) {
-            break;
-        }
         digitos[i] = static_cast<quint8>((numero % 10) + 0x30);
         numero /= 10;
     }

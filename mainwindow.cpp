@@ -37,6 +37,14 @@
 
 #include "console.h"
 #include "QMessageBox"
+#include <QJsonObject>
+#include <QJsonDocument>
+#include <QDir>
+#include <QFile>
+#include <QTextStream>
+#include <QThread>
+#include <QCoreApplication>
+#include <QDateTime>
 
 /**
  * @brief Constructor principal de la ventana.
@@ -78,6 +86,7 @@ MainWindow::MainWindow (QWidget *parent) :
   m_serialManager(new SerialPortManager(this)),
   m_messageParser(new SerialMessageParser(this)),
   m_fpgaProtocol(new FpgaProtocol()),
+  m_fpgaProtocolApplied(new FpgaProtocol()),
   m_plotManager(nullptr)
 
 {
@@ -113,6 +122,13 @@ MainWindow::MainWindow (QWidget *parent) :
   connect(m_serialManager, &SerialPortManager::portOpened, this, &MainWindow::portOpenedSuccess);
   connect(m_serialManager, &SerialPortManager::portOpenFailed, this, &MainWindow::portOpenedFail);
   connect(m_serialManager, &SerialPortManager::portClosed, this, &MainWindow::onPortClosed);
+  connect(m_serialManager, &SerialPortManager::writeFailed, this, [this](const QString &err){
+      qDebug() << "Serial write failed:" << err;
+      ui->statusBar->showMessage("Serial write failed: " + err);
+  });
+  connect(m_serialManager, &SerialPortManager::writeSucceeded, this, [this](qint64 bytes){
+      qDebug() << "Serial write succeeded, bytes:" << bytes;
+  });
 
   ui->setupUi (this);
 
@@ -290,6 +306,14 @@ void MainWindow::enable_com_controls (bool enable)
  */
 void MainWindow::openPort (QSerialPortInfo portInfo, int baudRate, QSerialPort::DataBits dataBits, QSerialPort::Parity parity, QSerialPort::StopBits stopBits)
 {
+    // Guardar parámetros para recuperación
+    m_lastConnectionParams.portInfo = portInfo;
+    m_lastConnectionParams.baudRate = baudRate;
+    m_lastConnectionParams.dataBits = dataBits;
+    m_lastConnectionParams.parity = parity;
+    m_lastConnectionParams.stopBits = stopBits;
+    
+    logEvent(EventType::PortOpened, QString("Abriendo puerto %1 a %2 bps").arg(portInfo.portName()).arg(baudRate));
     m_serialManager->openPort(portInfo, baudRate, dataBits, parity, stopBits);
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
@@ -306,6 +330,11 @@ void MainWindow::onPortClosed()
     if (m_csvManager) {
         m_csvManager->closeCsvFile();
     }
+
+    logEvent(EventType::PortClosed, "Puerto serie cerrado");
+
+    // Transición de máquina de estados
+    setAppState(AppState::Disconnected);
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -329,6 +358,9 @@ void MainWindow::portOpenedSuccess()
         m_plotManager->setupPlot();
     }
     ui->statusBar->showMessage ("Connected!");
+    
+    logEvent(EventType::PortOpened, "Conexión exitosa al puerto serie");
+    resetHealthMetrics();
 
     ui->A1_0->setStyleSheet("background-color: rgb(150, 50, 50);");
     ui->B1_1->setStyleSheet("background-color: rgb(150, 50, 50);");
@@ -366,6 +398,9 @@ void MainWindow::portOpenedSuccess()
     updateTimer.start(20);
     connected = true;
     plotting = true;
+
+    // Transición de máquina de estados
+    setAppState(AppState::ReadyForConfiguration);
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -398,6 +433,9 @@ void MainWindow::onNewDataArrived(QStringList newData)
 {
     if (!plotting || !m_plotManager) return;
 
+    // Actualizar métricas de salud
+    updateHealthMetrics(newData);
+    
     m_plotManager->addDataPoint(m_plotManager->dataPointCount(), newData);
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
@@ -527,27 +565,40 @@ void MainWindow::on_actionConnect_triggered()
     {
             /* Si ya esta conectado, reinicia si estaba pausado */
       if (!plotting)
-                {                                                                                   // Reinicia ploteo
-                    updateTimer.start();                                                              // Reinicia timer de actualizacion
+                {
+                    // Preflight check antes de reanudar adquisición
+                    PreflightResult check = performPreflightCheck();
+                    if (!check.success) {
+                        logEvent(EventType::Error, "Preflight check fallido al reanudar: " + check.errorMessage);
+                        setAppState(AppState::Fault);
+                        ui->statusBar->showMessage(check.errorMessage);
+                        cambiarEstado("FALLA: " + check.errorMessage, "red");
+                        return;
+                    }
+
+                    logEvent(EventType::Started, "Iniciando adquisición de datos");
+                    updateTimer.start();
           plotting = true;
           ui->actionConnect->setEnabled (false);
           ui->actionPause_Plot->setEnabled (true);
           ui->statusBar->showMessage ("Plot restarted!");
+
+          // Transición de máquina de estados
+          setAppState(AppState::Acquiring);
         }
     }
   else
     {
     /* Si no esta conectado, toma parametros de UI y conecta */
-    QSerialPortInfo portInfo (ui->comboPort->currentText());                          // Objeto temporal para crear QSerialPort
-    int baudRate = ui->comboBaud->currentText().toInt();                              // Baud rate seleccionado
-    int dataBitsIndex = ui->comboData->currentIndex();                                // Indice de bits de datos
-    int parityIndex = ui->comboParity->currentIndex();                                // Indice de paridad
-    int stopBitsIndex = ui->comboStop->currentIndex();                                // Indice de bits de parada
+    QSerialPortInfo portInfo (ui->comboPort->currentText());
+    int baudRate = ui->comboBaud->currentText().toInt();
+    int dataBitsIndex = ui->comboData->currentIndex();
+    int parityIndex = ui->comboParity->currentIndex();
+    int stopBitsIndex = ui->comboStop->currentIndex();
       QSerialPort::DataBits dataBits;
       QSerialPort::Parity parity;
       QSerialPort::StopBits stopBits;
 
-    /* Configura bits de datos segun el indice seleccionado */
       switch (dataBitsIndex)
         {
         case 0:
@@ -557,7 +608,6 @@ void MainWindow::on_actionConnect_triggered()
           dataBits = QSerialPort::Data7;
         }
 
-    /* Configura paridad segun el indice seleccionado */
       switch (parityIndex)
         {
         case 0:
@@ -570,7 +620,6 @@ void MainWindow::on_actionConnect_triggered()
           parity = QSerialPort::EvenParity;
         }
 
-    /* Configura bits de parada segun el indice seleccionado */
       switch (stopBitsIndex)
         {
         case 0:
@@ -580,7 +629,6 @@ void MainWindow::on_actionConnect_triggered()
           stopBits = QSerialPort::TwoStop;
         }
 
-    /* Abre el puerto serie con la configuracion construida */
       openPort (portInfo, baudRate, dataBits, parity, stopBits);
   }
 }
@@ -593,12 +641,16 @@ void MainWindow::on_actionPause_Plot_triggered()
 {
   if (plotting)
     {
-    updateTimer.stop();                                                               // Detiene timer de actualizacion
+    logEvent(EventType::Stopped, "Pausando adquisición de datos");
+    updateTimer.stop();
       plotting = false;
       ui->actionConnect->setEnabled (true);
       ui->actionPause_Plot->setEnabled (false);
       ui->statusBar->showMessage ("Plot paused, new data will be ignored");
       cambiarEstado("PAUSA (Experimento Interrumpido)", "orange");
+
+      // Transición de máquina de estados
+      setAppState(AppState::Paused);
     }
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
@@ -630,6 +682,7 @@ void MainWindow::on_actionDisconnect_triggered()
 {
   if (connected)
     {
+      logEvent(EventType::Stopped, "Desconectando puerto");
       if (m_serialManager) {
           m_serialManager->closePort();
       }
@@ -651,6 +704,9 @@ void MainWindow::on_actionDisconnect_triggered()
 
       ui->statusBar->showMessage("Disconnected!");
       cambiarEstado("DETENIDO (Requiere Rearme)", "red");
+
+      // Transición de máquina de estados
+      setAppState(AppState::Disconnected);
     }
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
@@ -741,43 +797,58 @@ void MainWindow::initActionsConnections()
 
 void MainWindow::on_EnviarDatos_clicked()
 {
-    // Envia al equipo el comando de inicio y el paquete extendido de configuracion.
-    if (connected == true)
-    {
-        cambiarEstado("Enviando (Extendido 48B)...", "green");
-
-        limpiarPlot();
-        QStringList labels = m_fpgaProtocol->generateLabels();
-        QVector<int> tramaIndices = m_fpgaProtocol->activeTramaIndices();
-        if (m_plotManager) {
-            m_plotManager->setActiveTramaIndices(tramaIndices);
-            m_plotManager->setupGraphsFromLabels(labels);
-            channels = m_plotManager->channelCount();
-        }
-
-        QByteArray startCommand = m_fpgaProtocol->buildStartCommand();
-        QByteArray packet = m_fpgaProtocol->buildExtendedPacket(ui->TiempoNum->value(), ui->TiempoBox->currentIndex());
-
-        if (m_serialManager) {
-            m_serialManager->writeData(startCommand);
-            m_serialManager->writeData(packet);
-            m_serialManager->writeData(startCommand);
-        }
-
-        qDebug() << "Paquete Extendido Enviado:" << packet.toHex();
+    // Preflight check
+    PreflightResult check = performPreflightCheck();
+    if (!check.success) {
+        logEvent(EventType::Error, "Preflight check fallido: " + check.errorMessage);
+        setAppState(AppState::Fault);
+        ui->statusBar->showMessage(check.errorMessage);
+        cambiarEstado("FALLA: " + check.errorMessage, "red");
+        return;
     }
-    else
-    {
-        emit portOpenFail();
-        cambiarEstado("ERROR: Desconectado", "red");
-        ui->statusBar->showMessage("MASTER: CONFIGURASTE EL PUERTO??");
+
+    // Aplicar configuración al FPGA
+    cambiarEstado("Aplicando y armando...", "green");
+    logEvent(EventType::ConfigApplied, "Aplicando configuración al FPGA");
+
+    limpiarPlot();
+    QStringList labels = m_fpgaProtocol->generateLabels();
+    QVector<int> tramaIndices = m_fpgaProtocol->activeTramaIndices();
+    if (m_plotManager) {
+        m_plotManager->setActiveTramaIndices(tramaIndices);
+        m_plotManager->setupGraphsFromLabels(labels);
+        channels = m_plotManager->channelCount();
     }
+
+    QByteArray startCommand = m_fpgaProtocol->buildStartCommand();
+    QByteArray packet = m_fpgaProtocol->buildExtendedPacket(ui->TiempoNum->value(), ui->TiempoBox->currentIndex());
+
+    if (m_serialManager) {
+        m_serialManager->writeData(startCommand);
+        QThread::msleep(10);
+        m_serialManager->writeData(packet);
+        QThread::msleep(10);
+        m_serialManager->writeData(startCommand);
+    }
+
+    qDebug() << "Paquete Extendido Enviado:" << packet.toHex();
+
+    // Snapshot: guardar configuración aplicada
+    // (en futuro se puede clonar FpgaProtocol para comparativa)
+
+    // Limpiar indicador de cambios pendientes
+    clearPendingChanges();
+
+    // Transición de máquina de estados
+    cambiarEstado("Listo para ejecutar. Presioná 'Conectar'.", "blue");
+    setAppState(AppState::ReadyForExecution);
 }
 void MainWindow::on_ResetearDatos_clicked()
 {
     // Reinicia estado remoto y local: limpia interfaz y reenvia configuracion base.
     if (connected == true)
     {
+        logEvent(EventType::Reset, "Ejecutando reset de FPGA");
         cambiarEstado("RESETEANDO...", "orange");
 
         if (m_serialManager) {
@@ -885,14 +956,17 @@ void MainWindow::actualizarMaximoDeTiempo(int nuevoIndice)
     ui->TiempoNum->setValue(nuevoValor);
 
     indiceUnidadAnterior = nuevoIndice;
+    
+    // Marcar cambios pendientes cuando cambia unidad de tiempo
+    markPendingChanges();
 }
 
 // Propaga cambios de controles de timing hacia la configuracion del protocolo FPGA.
-void MainWindow::on_Ancho_de_pulso_valueChanged(int arg1) { m_fpgaProtocol->setPulseWidth(static_cast<quint8>(arg1)); }
-void MainWindow::on_Delay_A_valueChanged(int arg1)        { m_fpgaProtocol->setDelayA(static_cast<quint8>(arg1)); }
-void MainWindow::on_Delay_B_valueChanged(int arg1)        { m_fpgaProtocol->setDelayB(static_cast<quint8>(arg1)); }
-void MainWindow::on_Delay_C_valueChanged(int arg1)        { m_fpgaProtocol->setDelayC(static_cast<quint8>(arg1)); }
-void MainWindow::on_Delay_D_valueChanged(int arg1)        { m_fpgaProtocol->setDelayD(static_cast<quint8>(arg1)); }
+void MainWindow::on_Ancho_de_pulso_valueChanged(int arg1) { m_fpgaProtocol->setPulseWidth(static_cast<quint8>(arg1)); markPendingChanges(); }
+void MainWindow::on_Delay_A_valueChanged(int arg1)        { m_fpgaProtocol->setDelayA(static_cast<quint8>(arg1)); markPendingChanges(); }
+void MainWindow::on_Delay_B_valueChanged(int arg1)        { m_fpgaProtocol->setDelayB(static_cast<quint8>(arg1)); markPendingChanges(); }
+void MainWindow::on_Delay_C_valueChanged(int arg1)        { m_fpgaProtocol->setDelayC(static_cast<quint8>(arg1)); markPendingChanges(); }
+void MainWindow::on_Delay_D_valueChanged(int arg1)        { m_fpgaProtocol->setDelayD(static_cast<quint8>(arg1)); markPendingChanges(); }
 
 void MainWindow::actualizarEstadoGraf(int indiceBotonPresionado)
 {
@@ -904,6 +978,9 @@ void MainWindow::actualizarEstadoGraf(int indiceBotonPresionado)
     botonesGraf[indiceBotonPresionado]->setStyleSheet("background-color: rgb(15, 125, 15);");
     columnaSeleccionada = indiceBotonPresionado;
     m_fpgaProtocol->selectColumn(indiceBotonPresionado);
+    
+    // Marcar cambios pendientes
+    markPendingChanges();
 }
 
 void MainWindow::actualizarBotonDato(int bit, QPushButton* boton)
@@ -915,6 +992,9 @@ void MainWindow::actualizarBotonDato(int bit, QPushButton* boton)
     } else {
         boton->setStyleSheet("background-color: rgb(150, 50, 50);"); // Rojo
     }
+    
+    // Marcar cambios pendientes
+    markPendingChanges();
 }
 
 void MainWindow::cambiarEstado(QString texto, QString color)
@@ -958,4 +1038,530 @@ QStringList MainWindow::generarLabels()
     // Expone las etiquetas activas calculadas por el protocolo FPGA.
     return m_fpgaProtocol->generateLabels();
 }
+
+/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+// ─── Máquina de Estados Operativa ────────────────────────────────────────
+
+void MainWindow::setAppState(AppState newState)
+{
+    if (m_appState == newState) {
+        return; // No cambiar si ya está en ese estado
+    }
+
+    // Registrar transición
+    qDebug() << "Estado anterior:" << getStateDisplayName(m_appState)
+             << "-> Estado nuevo:" << getStateDisplayName(newState);
+
+    m_appState = newState;
+    updateUIForState();
+}
+
+QString MainWindow::getStateDisplayName(AppState state) const
+{
+    switch (state) {
+    case AppState::Disconnected:
+        return "Desconectado";
+    case AppState::ReadyForConfiguration:
+        return "Listo para configurar";
+    case AppState::ReadyForExecution:
+        return "Listo para ejecutar";
+    case AppState::Acquiring:
+        return "Adquiriendo";
+    case AppState::Paused:
+        return "Pausado";
+    case AppState::Fault:
+        return "Falla";
+    default:
+        return "Desconocido";
+    }
+}
+
+void MainWindow::updateUIForState()
+{
+    const bool isDisconnected = (m_appState == AppState::Disconnected);
+    const bool isReadyForConfig = (m_appState == AppState::ReadyForConfiguration);
+    const bool isReadyForExecution = (m_appState == AppState::ReadyForExecution);
+    const bool isAcquiring = (m_appState == AppState::Acquiring);
+    const bool isPaused = (m_appState == AppState::Paused);
+    const bool isFault = (m_appState == AppState::Fault);
+
+    // Habilitar/deshabilitar controles según el estado
+    bool canConfigure = isReadyForConfig || isReadyForExecution || isPaused;
+    bool canExecute = isReadyForExecution;
+    bool canPause = isAcquiring;
+    bool canResume = isPaused;
+
+    // Controles de puerto COM
+    ui->comboPort->setEnabled(isDisconnected);
+    ui->comboBaud->setEnabled(isDisconnected);
+    ui->comboData->setEnabled(isDisconnected);
+    ui->comboParity->setEnabled(isDisconnected);
+    ui->comboStop->setEnabled(isDisconnected);
+
+    // Botones de acción principal
+    ui->actionConnect->setEnabled(isDisconnected || canResume);
+    ui->actionDisconnect->setEnabled(!isDisconnected && !isFault);
+    ui->actionPause_Plot->setEnabled(canPause);
+
+    // Controles de configuración
+    bool enableConfig = canConfigure && !isFault;
+    for (auto btn : botonesGraf) btn->setEnabled(enableConfig);
+    for (auto btn : botonesDatos) btn->setEnabled(enableConfig);
+    ui->TiempoNum->setEnabled(enableConfig);
+    ui->TiempoBox->setEnabled(enableConfig);
+    ui->Ancho_de_pulso->setEnabled(enableConfig);
+    ui->Delay_A->setEnabled(enableConfig);
+    ui->Delay_B->setEnabled(enableConfig);
+    ui->Delay_C->setEnabled(enableConfig);
+    ui->Delay_D->setEnabled(enableConfig);
+
+    // Botones de envío/reset
+    ui->EnviarDatos->setEnabled(enableConfig);
+    ui->ResetearDatos->setEnabled(enableConfig && (isReadyForConfig || isPaused));
+
+    // Grabación CSV
+    ui->actionRecord_stream->setEnabled(isAcquiring || isPaused);
+
+    // Actualizar mensaje de estado
+    QString stateMsg = getStateDisplayName(m_appState);
+    QString color = "black";
+
+    switch (m_appState) {
+    case AppState::Disconnected:
+        stateMsg += " - Abrí puerto para comenzar";
+        color = "red";
+        break;
+    case AppState::ReadyForConfiguration:
+        stateMsg += " - Configurá matriz y parámetros";
+        color = "blue";
+        break;
+    case AppState::ReadyForExecution:
+        stateMsg += " - Presioná 'Conectar' para iniciar";
+        color = "green";
+        break;
+    case AppState::Acquiring:
+        stateMsg += " - Adquisición en progreso";
+        color = "darkgreen";
+        break;
+    case AppState::Paused:
+        stateMsg += " - Reconfigurar o reanudar";
+        color = "orange";
+        break;
+    case AppState::Fault:
+        stateMsg += " - Error detectado, desconectar para recuperar";
+        color = "red";
+        break;
+    }
+
+    cambiarEstado(stateMsg, color);
+}
+
+bool MainWindow::canTransitionToState(AppState newState) const
+{
+    // Define transiciones válidas
+    switch (m_appState) {
+    case AppState::Disconnected:
+        return (newState == AppState::ReadyForConfiguration || newState == AppState::Fault);
+    case AppState::ReadyForConfiguration:
+        return (newState == AppState::ReadyForExecution || newState == AppState::Disconnected || newState == AppState::Fault);
+    case AppState::ReadyForExecution:
+        return (newState == AppState::Acquiring || newState == AppState::ReadyForConfiguration || newState == AppState::Disconnected || newState == AppState::Fault);
+    case AppState::Acquiring:
+        return (newState == AppState::Paused || newState == AppState::Disconnected || newState == AppState::Fault);
+    case AppState::Paused:
+        return (newState == AppState::Acquiring || newState == AppState::ReadyForConfiguration || newState == AppState::Disconnected || newState == AppState::Fault);
+    case AppState::Fault:
+        return (newState == AppState::Disconnected);
+    default:
+        return false;
+    }
+}
+
+/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+// ─── Gestión de Cambios Pendientes ─────────────────────────────────────────
+
+void MainWindow::markPendingChanges()
+{
+    if (!m_hasPendingChanges) {
+        m_hasPendingChanges = true;
+        updatePendingChangesIndicator();
+    }
+}
+
+void MainWindow::clearPendingChanges()
+{
+    if (m_hasPendingChanges) {
+        m_hasPendingChanges = false;
+        updatePendingChangesIndicator();
+    }
+}
+
+void MainWindow::updatePendingChangesIndicator()
+{
+    // Actualizar estilo y mensaje según estado de cambios pendientes
+    if (m_hasPendingChanges) {
+        // Resaltar botón "Aplicar y Armar" en naranja para atraer atención
+        ui->EnviarDatos->setStyleSheet("background-color: rgb(255, 140, 0); color: white; font-weight: bold;");
+        ui->statusBar->showMessage("⚠ Cambios pendientes de aplicar. Presioná 'Aplicar y Armar'.");
+    } else {
+        // Restaurar color normal del botón
+        ui->EnviarDatos->setStyleSheet("");
+        ui->statusBar->showMessage("");
+    }
+}
+
+MainWindow::PreflightResult MainWindow::performPreflightCheck()
+{
+    PreflightResult result;
+    result.success = true;
+
+    // 1. Verificar puerto abierto
+    if (!connected) {
+        result.errorMessage = "Puerto serie no conectado. Abrí puerto primero.";
+        return result;
+    }
+
+    // 2. Verificar que haya canales activos
+    QStringList labels = m_fpgaProtocol->generateLabels();
+    if (labels.isEmpty()) {
+        result.errorMessage = "Sin canales activos. Configurá matriz de botones.";
+        return result;
+    }
+
+    // 3. Verificar tiempo válido
+    int timeValue = ui->TiempoNum->value();
+    if (timeValue <= 0) {
+        result.errorMessage = "Valor de tiempo inválido. Asegurate de que sea > 0.";
+        return result;
+    }
+
+    // 4. Verificar rango de tiempos
+    int timeUnitIndex = ui->TiempoBox->currentIndex();
+    quint32 baseTime = m_fpgaProtocol->convertToBase(timeValue, timeUnitIndex);
+    if (baseTime < 56) {  // 5.6 ms en unidad base
+        result.errorMessage = "Tiempo mínimo permitido: 5.6 ms.";
+        return result;
+    }
+    if (baseTime > 99999999) {
+        result.errorMessage = "Tiempo máximo permitido: 99,999,999 (unidad base).";
+        return result;
+    }
+
+    // 5. Verificar CSV si está grabando
+    if (ui->actionRecord_stream->isChecked()) {
+        if (!m_csvManager || !m_csvManager->isOpen()) {
+            result.errorMessage = "Grabación CSV habilitada pero archivo no está abierto.";
+            return result;
+        }
+    }
+
+    result.success = true;
+    return result;
+}
+
+/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+// ─── Telemetría de Salud en Tiempo Real ────────────────────────────────────────
+
+void MainWindow::updateHealthMetrics(const QStringList &newData)
+{
+    qint64 now = QDateTime::currentMSecsSinceEpoch();
+    
+    if (m_healthMetrics.firstPacketTime == 0) {
+        m_healthMetrics.firstPacketTime = now;
+    }
+    
+    m_healthMetrics.lastPacketTimestampMs = now;
+    m_healthMetrics.validPacketCount++;
+    
+    // Calcular latencia estimada en ms (diferencia entre muestras)
+    static qint64 lastTime = 0;
+    if (lastTime > 0) {
+        m_healthMetrics.frameLatencyMs = static_cast<float>(now - lastTime);
+    }
+    lastTime = now;
+}
+
+void MainWindow::resetHealthMetrics()
+{
+    m_healthMetrics.validPacketCount = 0;
+    m_healthMetrics.invalidPacketCount = 0;
+    m_healthMetrics.lostPacketCount = 0;
+    m_healthMetrics.lastPacketTimestampMs = 0;
+    m_healthMetrics.frameLatencyMs = 0.0f;
+    m_healthMetrics.firstPacketTime = 0;
+}
+
+QString MainWindow::getHealthMetricsString() const
+{
+    return QString(
+        "Paquetes válidos: %1 | Inválidos: %2 | Latencia: %.1f ms | Última recepción: %3 ms"
+    ).arg(m_healthMetrics.validPacketCount)
+     .arg(m_healthMetrics.invalidPacketCount)
+     .arg(m_healthMetrics.frameLatencyMs, 0, 'f', 1)
+     .arg(m_healthMetrics.lastPacketTimestampMs);
+}
+
+/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+// ─── Recuperación Guiada ante Fallos ───────────────────────────────────────────
+
+bool MainWindow::isRecoveryPossible() const
+{
+    return m_appState == AppState::Fault && !m_lastConnectionParams.portInfo.portName().isEmpty();
+}
+
+void MainWindow::attemptRecovery()
+{
+    logEvent(EventType::Recovery, "Iniciando secuencia de recuperación");
+    
+    // 1. Cerrar puerto si está abierto
+    if (connected && m_serialManager) {
+        m_serialManager->closePort();
+        QThread::msleep(100);  // Pequeña pausa para limpiar buffers
+    }
+    
+    // 2. Resetear estado local
+    resetHealthMetrics();
+    limpiarMatrizInterna();
+    limpiarPlot();
+    
+    // 3. Limpiar parser
+    if (m_messageParser) {
+        // Reset interno del parser si es necesario
+    }
+    
+    // 4. Reconectar con parámetros previos
+    openPort(
+        m_lastConnectionParams.portInfo,
+        m_lastConnectionParams.baudRate,
+        m_lastConnectionParams.dataBits,
+        m_lastConnectionParams.parity,
+        m_lastConnectionParams.stopBits
+    );
+    
+    logEvent(EventType::Recovery, "Secuencia de recuperación completada");
+}
+
+/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+// ─── Trazabilidad Operativa (Event Logging) ───────────────────────────────
+
+void MainWindow::logEvent(EventType type, const QString &description)
+{
+    OperativeEvent event;
+    event.timestampMs = QDateTime::currentMSecsSinceEpoch();
+    event.eventType = type;
+    event.description = description;
+    
+    m_eventLog.append(event);
+    
+    // Limitar tamaño del log
+    if (m_eventLog.size() > MAX_LOG_ENTRIES) {
+        m_eventLog.removeFirst();
+    }
+    
+    // Debug: mostrar en consola
+    qDebug() << event.toString();
+}
+
+QString MainWindow::getEventLogAsString(int maxEntries) const
+{
+    QString result;
+    int startIdx = qMax(0, m_eventLog.size() - maxEntries);
+    
+    for (int i = startIdx; i < m_eventLog.size(); ++i) {
+        result += m_eventLog.at(i).toString() + "\n";
+    }
+    
+    return result;
+}
+
+void MainWindow::clearEventLog()
+{
+    m_eventLog.clear();
+}
+
+void MainWindow::exportEventLog(const QString &filePath)
+{
+    QFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        logEvent(EventType::Error, "No se pudo abrir archivo de log: " + filePath);
+        return;
+    }
+    
+    QTextStream stream(&file);
+    stream << getEventLogAsString(m_eventLog.size());
+    file.close();
+    
+    logEvent(EventType::ConfigApplied, "Log exportado a: " + filePath);
+}
+
+/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+// ─── Perfiles Operativos (Config Profiles) ────────────────────────────────
+
+QString MainWindow::getProfilesDirectory() const
+{
+    QString appDir = QCoreApplication::applicationDirPath();
+    QString profilesDir = appDir + "/profiles";
+    
+    QDir dir(profilesDir);
+    if (!dir.exists()) {
+        QDir().mkpath(profilesDir);
+    }
+    
+    return profilesDir;
+}
+
+void MainWindow::saveProfile(const QString &profileName)
+{
+    if (profileName.isEmpty()) {
+        logEvent(EventType::Error, "Nombre de perfil vacío");
+        return;
+    }
+    
+    OperativeProfile profile;
+    profile.name = profileName;
+    profile.matrixButtons = m_fpgaProtocol->getTecla();  // Requiere método en FpgaProtocol
+    profile.pulseWidth = m_fpgaProtocol->getPulseWidth();
+    profile.delayA = m_fpgaProtocol->getDelayA();
+    profile.delayB = m_fpgaProtocol->getDelayB();
+    profile.delayC = m_fpgaProtocol->getDelayC();
+    profile.delayD = m_fpgaProtocol->getDelayD();
+    profile.timeValue = ui->TiempoNum->value();
+    profile.timeUnitIndex = ui->TiempoBox->currentIndex();
+    profile.createdTimestamp = QDateTime::currentMSecsSinceEpoch();
+    
+    QString filePath = getProfilesDirectory() + "/" + profileName + ".json";
+    QFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        logEvent(EventType::Error, "No se pudo guardar perfil: " + profileName);
+        return;
+    }
+    
+    file.write(profile.toJson().toUtf8());
+    file.close();
+    
+    logEvent(EventType::ConfigApplied, "Perfil guardado: " + profileName);
+}
+
+void MainWindow::loadProfile(const QString &profileName)
+{
+    QString filePath = getProfilesDirectory() + "/" + profileName + ".json";
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        logEvent(EventType::Error, "No se pudo cargar perfil: " + profileName);
+        return;
+    }
+    
+    QString json = QString::fromUtf8(file.readAll());
+    file.close();
+    
+    OperativeProfile profile = OperativeProfile::fromJson(json);
+    
+    // Aplicar configuración
+    if (!profile.name.isEmpty()) {
+        // Actualizar matriz
+        for (int i = 0; i < qMin(32, profile.matrixButtons.size()); ++i) {
+            if (botonesDatos.size() > i) {
+                if (profile.matrixButtons.testBit(i) != (botonesDatos[i]->styleSheet().contains("15, 125, 15"))) {
+                    actualizarBotonDato(i, botonesDatos[i]);
+                }
+            }
+        }
+        
+        // Actualizar parámetros de timing
+        ui->Ancho_de_pulso->setValue(profile.pulseWidth);
+        ui->Delay_A->setValue(profile.delayA);
+        ui->Delay_B->setValue(profile.delayB);
+        ui->Delay_C->setValue(profile.delayC);
+        ui->Delay_D->setValue(profile.delayD);
+        ui->TiempoBox->setCurrentIndex(profile.timeUnitIndex);
+        ui->TiempoNum->setValue(profile.timeValue);
+        
+        logEvent(EventType::ConfigApplied, "Perfil cargado: " + profileName);
+    }
+}
+
+void MainWindow::deleteProfile(const QString &profileName)
+{
+    QString filePath = getProfilesDirectory() + "/" + profileName + ".json";
+    if (QFile::remove(filePath)) {
+        logEvent(EventType::ConfigApplied, "Perfil eliminado: " + profileName);
+    } else {
+        logEvent(EventType::Error, "No se pudo eliminar perfil: " + profileName);
+    }
+}
+
+QStringList MainWindow::getProfileNames() const
+{
+    QStringList names;
+    QDir dir(getProfilesDirectory());
+    QStringList filters;
+    filters << "*.json";
+    dir.setNameFilters(filters);
+    
+    foreach (QString filename, dir.entryList()) {
+        names << filename.left(filename.length() - 5);  // Quitar .json
+    }
+    
+    return names;
+}
+
+// ─── Implementación de Serialización de Perfil ─────────────────────────────
+
+QString MainWindow::OperativeProfile::toJson() const
+{
+    QJsonObject obj;
+    obj["name"] = name;
+    obj["pulseWidth"] = (int)pulseWidth;
+    obj["delayA"] = (int)delayA;
+    obj["delayB"] = (int)delayB;
+    obj["delayC"] = (int)delayC;
+    obj["delayD"] = (int)delayD;
+    obj["timeValue"] = timeValue;
+    obj["timeUnitIndex"] = timeUnitIndex;
+    obj["createdTimestamp"] = (qint64)createdTimestamp;
+    
+    // Serializar matriz de bits
+    QString matrixStr;
+    for (int i = 0; i < matrixButtons.size(); ++i) {
+        matrixStr += matrixButtons.testBit(i) ? "1" : "0";
+    }
+    obj["matrixButtons"] = matrixStr;
+    
+    QJsonDocument doc(obj);
+    return QString::fromUtf8(doc.toJson());
+}
+
+MainWindow::OperativeProfile MainWindow::OperativeProfile::fromJson(const QString &json)
+{
+    OperativeProfile profile;
+    QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+    QJsonObject obj = doc.object();
+    
+    profile.name = obj["name"].toString();
+    profile.pulseWidth = (quint8)obj["pulseWidth"].toInt();
+    profile.delayA = (quint8)obj["delayA"].toInt();
+    profile.delayB = (quint8)obj["delayB"].toInt();
+    profile.delayC = (quint8)obj["delayC"].toInt();
+    profile.delayD = (quint8)obj["delayD"].toInt();
+    profile.timeValue = obj["timeValue"].toInt();
+    profile.timeUnitIndex = obj["timeUnitIndex"].toInt();
+    profile.createdTimestamp = (qint64)obj["createdTimestamp"].toInt();
+    
+    // Deserializar matriz de bits
+    QString matrixStr = obj["matrixButtons"].toString();
+    profile.matrixButtons.resize(32);
+    for (int i = 0; i < qMin(32, matrixStr.size()); ++i) {
+        profile.matrixButtons.setBit(i, matrixStr[i] == '1');
+    }
+    
+    return profile;
+}
+
+/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 

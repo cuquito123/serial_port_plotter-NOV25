@@ -52,9 +52,35 @@ void SerialPortManager::closePort()
 // Envía un bloque de datos al puerto serie abierto.
 void SerialPortManager::writeData(const QByteArray &data)
 {
-    if (m_serialPort && m_serialPort->isOpen()) {
-        m_serialPort->write(data);
+    if (!m_serialPort) {
+        emit writeFailed(QStringLiteral("Serial port not initialized"));
+        return;
     }
+
+    if (!m_serialPort->isOpen()) {
+        emit writeFailed(QStringLiteral("Serial port not open"));
+        return;
+    }
+
+    qint64 totalWritten = 0;
+    const qint64 dataSize = data.size();
+    while (totalWritten < dataSize) {
+        qint64 written = m_serialPort->write(data.constData() + totalWritten, dataSize - totalWritten);
+        if (written == -1) {
+            emit writeFailed(m_serialPort->errorString());
+            return;
+        }
+
+        // Esperar que los bytes se transmitan (timeout corto)
+        if (!m_serialPort->waitForBytesWritten(200)) {
+            emit writeFailed(QStringLiteral("Timeout waiting for bytes written: %1").arg(m_serialPort->errorString()));
+            return;
+        }
+
+        totalWritten += written;
+    }
+
+    emit writeSucceeded(totalWritten);
 }
 
 // Devuelve el puntero al QSerialPort interno.

@@ -31,6 +31,7 @@
 #include "fpgaprotocol.hpp"
 #include "plotmanager.hpp"
 #include "csvmanager.hpp"
+#include "profilemanager.hpp"
 #include <x86intrin.h>
 #include <QWidget>
 #include <QDebug>
@@ -41,10 +42,44 @@
 #include <QJsonDocument>
 #include <QDir>
 #include <QFile>
+#include <QFileDialog>
+#include <QFormLayout>
+#include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QDesktopServices>
+#include <QLabel>
+#include <QHBoxLayout>
+#include <QPushButton>
+#include <QListWidget>
+#include <QStandardPaths>
+#include <QVBoxLayout>
+#include <QFileInfo>
+#include <QUrl>
 #include <QTextStream>
+#include <QSignalBlocker>
 #include <QThread>
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QInputDialog>
+
+namespace {
+QString formatDurationHms(qint64 totalMs)
+{
+    if (totalMs < 0) {
+        totalMs = 0;
+    }
+
+    qint64 seconds = totalMs / 1000;
+    const int hrs = int(seconds / 3600);
+    const int mins = int((seconds % 3600) / 60);
+    const int secs = int(seconds % 60);
+    return QString("%1:%2:%3").arg(hrs, 2, 10, QChar('0')).arg(mins, 2, 10, QChar('0')).arg(secs, 2, 10, QChar('0'));
+}
+}
 
 /**
  * @brief Constructor principal de la ventana.
@@ -107,7 +142,8 @@ MainWindow::MainWindow (QWidget *parent) :
   });
   connect(this, SIGNAL(newData(QStringList)), this, SLOT(onNewDataArrived(QStringList)));
   connect(this, &MainWindow::newData, this, [this](const QStringList &data) {
-      if (m_csvManager && ui->actionRecord_stream->isChecked()) {
+      // Only write to CSV if recording is enabled and the app is not paused
+      if (m_csvManager && ui->actionRecord_stream->isChecked() && m_appState != AppState::Paused) {
           int csvPointNumber = dataPointNumber;
           if (m_plotManager) {
               // onNewDataArrived agrega la muestra primero y luego incrementa el contador interno.
@@ -131,6 +167,8 @@ MainWindow::MainWindow (QWidget *parent) :
   });
 
   ui->setupUi (this);
+
+    buildMenus();
 
   m_plotManager = new PlotManager(ui->plot, ui->listWidget_Channels, this);
   m_plotManager->setColors(line_colors, gui_colors);
@@ -156,6 +194,20 @@ MainWindow::MainWindow (QWidget *parent) :
       statusLabel->setText("Listo");
       statusLabel->setMinimumWidth(100);
       ui->statusBar->addPermanentWidget(statusLabel);
+    // Experiment time label
+    experimentTimeLabel = new QLabel(this);
+    experimentTimeLabel->setText("Exp: 00:00:00");
+    experimentTimeLabel->setMinimumWidth(100);
+    ui->statusBar->addPermanentWidget(experimentTimeLabel);
+    // Experiment countdown label
+    experimentCountdownLabel = new QLabel(this);
+    experimentCountdownLabel->setText("");
+    experimentCountdownLabel->setMinimumWidth(140);
+    ui->statusBar->addPermanentWidget(experimentCountdownLabel);
+    // Configure experiment update timer
+    m_experimentUpdateTimer.setParent(this);
+    m_experimentUpdateTimer.setInterval(500);
+    connect(&m_experimentUpdateTimer, &QTimer::timeout, this, &MainWindow::updateExperimentTimeLabel);
       columnaSeleccionada = 0;
 
       botonesGraf << ui->GRAF_1 << ui->GRAF_2 << ui->GRAF_3 << ui->GRAF_4
@@ -182,6 +234,12 @@ MainWindow::MainWindow (QWidget *parent) :
           });
       }
 
+      connect(ui->pushButton_RecordStream, &QPushButton::clicked, this, [this]() {
+          const bool nextState = !ui->actionRecord_stream->isChecked();
+          ui->actionRecord_stream->setChecked(nextState);
+          on_actionRecord_stream_triggered();
+      });
+
       actualizarEstadoGraf(columnaSeleccionada);
 
       connect(ui->TiempoBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -191,6 +249,333 @@ MainWindow::MainWindow (QWidget *parent) :
       actualizarMaximoDeTiempo(indiceUnidadAnterior);
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+// ---------------- Experiment timer implementation -----------------------
+
+void MainWindow::startExperimentTimer()
+{
+    m_experimentAccumulatedMs = 0;
+    m_experimentTimer.start();
+    m_experimentUpdateTimer.start();
+    updateExperimentTimeLabel();
+}
+
+void MainWindow::on_actionSave_Profile_triggered()
+{
+    bool ok = false;
+    QString name = QInputDialog::getText(this, "Guardar Perfil", "Nombre del perfil:", QLineEdit::Normal, "", &ok);
+    if (ok && !name.isEmpty()) {
+        const QString profileName = QFileInfo(name).completeBaseName().trimmed();
+        if (profileName.isEmpty()) {
+            ui->statusBar->showMessage("Nombre de perfil inválido.");
+            return;
+        }
+
+        const QString path = ProfileManager::profilePath(profileName);
+        if (QFileInfo::exists(path)) {
+            const QMessageBox::StandardButton answer = QMessageBox::question(
+                this,
+                "Sobrescribir perfil",
+                QString("El perfil '%1' ya existe. ¿Deseas sobrescribirlo?").arg(profileName),
+                QMessageBox::Yes | QMessageBox::No,
+                QMessageBox::No
+            );
+            if (answer != QMessageBox::Yes) {
+                return;
+            }
+        }
+
+        ProfileManager::OperativeProfile profile;
+        profile.name = profileName;
+        profile.matrixButtons = m_fpgaProtocol ? m_fpgaProtocol->getTecla() : QBitArray(32);
+        profile.pulseWidth = m_fpgaProtocol ? m_fpgaProtocol->getPulseWidth() : static_cast<quint8>(ui->Ancho_de_pulso->value());
+        profile.delayA = m_fpgaProtocol ? m_fpgaProtocol->getDelayA() : static_cast<quint8>(ui->Delay_A->value());
+        profile.delayB = m_fpgaProtocol ? m_fpgaProtocol->getDelayB() : static_cast<quint8>(ui->Delay_B->value());
+        profile.delayC = m_fpgaProtocol ? m_fpgaProtocol->getDelayC() : static_cast<quint8>(ui->Delay_C->value());
+        profile.delayD = m_fpgaProtocol ? m_fpgaProtocol->getDelayD() : static_cast<quint8>(ui->Delay_D->value());
+        profile.timeValue = ui->TiempoNum->value();
+        profile.timeUnitIndex = ui->TiempoBox->currentIndex();
+        profile.createdTimestamp = QDateTime::currentMSecsSinceEpoch();
+
+        QString errorMessage;
+        if (!ProfileManager::saveProfile(profileName, profile, &errorMessage)) {
+            ui->statusBar->showMessage(errorMessage);
+            return;
+        }
+        ui->statusBar->showMessage("Perfil guardado: " + profileName);
+    }
+}
+
+void MainWindow::on_actionLoad_Profile_triggered()
+{
+    const QString file = QFileDialog::getOpenFileName(this, "Cargar Perfil", ProfileManager::profilesDirectory(), "JSON Files (*.json);;All Files (*)");
+    if (!file.isEmpty()) {
+        ProfileManager::OperativeProfile profile;
+        QString errorMessage;
+        if (!ProfileManager::loadProfile(file, &profile, &errorMessage)) {
+            ui->statusBar->showMessage(errorMessage);
+            return;
+        }
+
+        ProfileManager::UiContext context;
+        context.timeValueSpin = ui->TiempoNum;
+        context.timeUnitCombo = ui->TiempoBox;
+        context.pulseWidthSpin = ui->Ancho_de_pulso;
+        context.delayASpin = ui->Delay_A;
+        context.delayBSpin = ui->Delay_B;
+        context.delayCSpin = ui->Delay_C;
+        context.delayDSpin = ui->Delay_D;
+        context.matrixButtons = botonesDatos;
+        context.fpgaProtocol = m_fpgaProtocol;
+        context.markPendingChanges = [this]() { markPendingChanges(); };
+
+        ProfileManager::applyProfileToUi(profile, context);
+        ui->statusBar->showMessage("Perfil cargado: " + profile.name);
+    }
+}
+
+void MainWindow::on_actionManage_Profiles_triggered()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle("Gestionar perfiles");
+
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+    QLabel *previewLabel = new QLabel("Selecciona un perfil para ver sus detalles.", &dialog);
+    previewLabel->setWordWrap(true);
+    layout->addWidget(previewLabel);
+
+    QListWidget *listWidget = new QListWidget(&dialog);
+    layout->addWidget(listWidget);
+
+    for (const QString &profileName : ProfileManager::profileNames()) {
+        listWidget->addItem(profileName);
+    }
+
+    auto updatePreview = [previewLabel](const QString &profileName) {
+        if (profileName.isEmpty()) {
+            previewLabel->setText("Selecciona un perfil para ver sus detalles.");
+            return;
+        }
+
+        ProfileManager::OperativeProfile profile;
+        QString errorMessage;
+        if (!ProfileManager::loadProfile(ProfileManager::profilePath(profileName), &profile, &errorMessage)) {
+            previewLabel->setText(errorMessage);
+            return;
+        }
+
+        int activeBits = 0;
+        for (int i = 0; i < profile.matrixButtons.size(); ++i) {
+            if (profile.matrixButtons.testBit(i)) {
+                ++activeBits;
+            }
+        }
+
+        previewLabel->setText(
+            QString("Perfil: %1\nBits activos: %2\nPulso: %3\nDelay A/B/C/D: %4 / %5 / %6 / %7\nTiempo: %8 (unidad %9)\nCreado: %10")
+                .arg(profile.name)
+                .arg(activeBits)
+                .arg(profile.pulseWidth)
+                .arg(profile.delayA)
+                .arg(profile.delayB)
+                .arg(profile.delayC)
+                .arg(profile.delayD)
+                .arg(profile.timeValue)
+                .arg(profile.timeUnitIndex)
+                .arg(QDateTime::fromMSecsSinceEpoch(profile.createdTimestamp).toString("yyyy-MM-dd HH:mm:ss"))
+        );
+    };
+
+    connect(listWidget, &QListWidget::currentTextChanged, &dialog, updatePreview);
+    if (listWidget->count() > 0) {
+        listWidget->setCurrentRow(0);
+    }
+
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    QPushButton *loadButton = new QPushButton("Cargar", &dialog);
+    QPushButton *deleteButton = new QPushButton("Eliminar", &dialog);
+    QPushButton *renameButton = new QPushButton("Renombrar", &dialog);
+    QPushButton *closeButton = new QPushButton("Cerrar", &dialog);
+    buttonLayout->addWidget(loadButton);
+    buttonLayout->addWidget(deleteButton);
+    buttonLayout->addWidget(renameButton);
+    buttonLayout->addStretch();
+    buttonLayout->addWidget(closeButton);
+    layout->addLayout(buttonLayout);
+
+    connect(closeButton, &QPushButton::clicked, &dialog, &QDialog::accept);
+    connect(loadButton, &QPushButton::clicked, &dialog, [this, listWidget, &dialog]() {
+        QListWidgetItem *item = listWidget->currentItem();
+        if (!item) {
+            return;
+        }
+        ProfileManager::OperativeProfile profile;
+        QString errorMessage;
+        const QString filePath = ProfileManager::profilePath(item->text());
+        if (!ProfileManager::loadProfile(filePath, &profile, &errorMessage)) {
+            QMessageBox::warning(this, "Gestionar perfiles", errorMessage);
+            return;
+        }
+
+        ProfileManager::UiContext context;
+        context.timeValueSpin = ui->TiempoNum;
+        context.timeUnitCombo = ui->TiempoBox;
+        context.pulseWidthSpin = ui->Ancho_de_pulso;
+        context.delayASpin = ui->Delay_A;
+        context.delayBSpin = ui->Delay_B;
+        context.delayCSpin = ui->Delay_C;
+        context.delayDSpin = ui->Delay_D;
+        context.matrixButtons = botonesDatos;
+        context.fpgaProtocol = m_fpgaProtocol;
+        context.markPendingChanges = [this]() { markPendingChanges(); };
+
+        ProfileManager::applyProfileToUi(profile, context);
+        ui->statusBar->showMessage("Perfil cargado: " + profile.name);
+        dialog.accept();
+    });
+    connect(deleteButton, &QPushButton::clicked, &dialog, [this, listWidget]() {
+        QListWidgetItem *item = listWidget->currentItem();
+        if (!item) {
+            return;
+        }
+
+        const QString profileName = item->text();
+        const QMessageBox::StandardButton answer = QMessageBox::question(
+            this,
+            "Eliminar perfil",
+            QString("¿Eliminar el perfil '%1'?").arg(profileName),
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No
+        );
+        if (answer != QMessageBox::Yes) {
+            return;
+        }
+
+        QString errorMessage;
+        if (!ProfileManager::deleteProfile(profileName, &errorMessage)) {
+            QMessageBox::warning(this, "Gestionar perfiles", errorMessage);
+            return;
+        }
+
+        delete listWidget->takeItem(listWidget->row(item));
+        ui->statusBar->showMessage("Perfil eliminado: " + profileName);
+    });
+
+    connect(renameButton, &QPushButton::clicked, &dialog, [this, listWidget, updatePreview]() {
+        QListWidgetItem *item = listWidget->currentItem();
+        if (!item) {
+            return;
+        }
+
+        const QString oldName = item->text();
+        bool ok = false;
+        const QString newName = QInputDialog::getText(
+            this,
+            "Renombrar perfil",
+            "Nuevo nombre del perfil:",
+            QLineEdit::Normal,
+            oldName,
+            &ok
+        ).trimmed();
+        if (!ok || newName.isEmpty()) {
+            return;
+        }
+
+        QString errorMessage;
+        if (!ProfileManager::renameProfile(oldName, newName, &errorMessage)) {
+            QMessageBox::warning(this, "Gestionar perfiles", errorMessage);
+            return;
+        }
+
+        item->setText(newName);
+        ui->statusBar->showMessage("Perfil renombrado: " + newName);
+        updatePreview(newName);
+    });
+
+    dialog.exec();
+}
+void MainWindow::pauseExperimentTimer()
+{
+    if (m_experimentTimer.isValid()) {
+        m_experimentAccumulatedMs += m_experimentTimer.elapsed();
+    }
+    m_experimentTimer.invalidate();
+    m_experimentUpdateTimer.stop();
+    updateExperimentTimeLabel();
+}
+
+void MainWindow::resumeExperimentTimer()
+{
+    // If already running, nothing to do
+    if (m_experimentTimer.isValid()) {
+        return;
+    }
+    m_experimentTimer.start();
+    m_experimentUpdateTimer.start();
+    updateExperimentTimeLabel();
+}
+
+void MainWindow::resetExperimentTimer()
+{
+    m_experimentUpdateTimer.stop();
+    m_experimentAccumulatedMs = 0;
+    m_experimentTimer.invalidate();
+    if (experimentTimeLabel) {
+        experimentTimeLabel->setText("Exp: 00:00:00");
+    }
+}
+
+void MainWindow::updateExperimentTimeLabel()
+{
+    qint64 totalMs = m_experimentAccumulatedMs;
+    if (m_experimentTimer.isValid()) {
+        totalMs += m_experimentTimer.elapsed();
+    }
+
+    qint64 seconds = totalMs / 1000;
+    int hrs = int(seconds / 3600);
+    int mins = int((seconds % 3600) / 60);
+    int secs = int(seconds % 60);
+
+    QString text = QString("Exp: %1:%2:%3").arg(hrs,2,10,QChar('0')).arg(mins,2,10,QChar('0')).arg(secs,2,10,QChar('0'));
+    if (experimentTimeLabel) experimentTimeLabel->setText(text);
+
+    // If the user configured a duration, and we've reached it, auto-pause acquisition
+    if (ui && ui->ExperimentDurationNum && ui->ExperimentDurationUnit) {
+        qint64 desiredMs = 0;
+        int val = ui->ExperimentDurationNum->value();
+        int unitIdx = ui->ExperimentDurationUnit->currentIndex();
+        switch (unitIdx) {
+            case 0: desiredMs = qint64(val) * 1000; break; // segundos
+            case 1: desiredMs = qint64(val) * 60 * 1000; break; // minutos
+            case 2: desiredMs = qint64(val) * 3600 * 1000; break; // horas
+            default: desiredMs = qint64(val) * 1000; break;
+        }
+
+        if (desiredMs > 0 && totalMs >= desiredMs) {
+            if (m_appState == AppState::Acquiring) {
+                const QString finishedMsg = QString("Experimento finalizado: duración máxima alcanzada (%1)")
+                    .arg(formatDurationHms(desiredMs));
+                logEvent(EventType::Stopped, finishedMsg);
+                // Pause acquisition
+                updateTimer.stop();
+                plotting = false;
+                pauseExperimentTimer();
+                ui->statusBar->showMessage("Duración alcanzada: adquisición pausada");
+                cambiarEstado(finishedMsg, "blue");
+                // Stop recording and close CSV cleanly
+                if (m_csvManager && m_csvManager->isOpen()) {
+                    m_csvManager->closeCsvFile();
+                    ui->actionRecord_stream->setChecked(false);
+                }
+                setRecordingControlsState(false);
+                experimentCountdownLabel->setText(QString("Finalizado: %1").arg(formatDurationHms(desiredMs)));
+                setAppState(AppState::ReadyForExecution);
+            }
+        }
+    }
+}
+
 
 /**
  * @brief Destructor.
@@ -263,6 +648,159 @@ void MainWindow::createUI()
     /* Inicializa la lista de canales */
     ui->listWidget_Channels->clear();
 }
+
+void MainWindow::buildMenus()
+{
+    if (!ui || !ui->menuBar) {
+        return;
+    }
+
+    ui->actionConnect->setText("Conectar");
+    ui->actionConnect->setShortcut(QKeySequence(Qt::Key_MediaPlay));
+    ui->actionDisconnect->setText("Desconectar");
+    ui->actionDisconnect->setShortcut(QKeySequence(Qt::Key_MediaStop));
+    ui->actionPause_Plot->setText("Pausa/Reanuda");
+    ui->actionPause_Plot->setShortcut(QKeySequence(Qt::Key_MediaPause));
+    ui->actionClear->setText("Limpiar Gráfico");
+    ui->actionHow_to_use->setText("Cómo usar");
+    ui->actionHow_to_use->setShortcut(QKeySequence::HelpContents);
+    ui->actionRecord_stream->setText("Grabar Stream (CSV)");
+    ui->actionRecord_stream->setShortcut(QKeySequence::Save);
+    ui->pushButton_RecordStream->setText("Grabar Stream");
+    ui->pushButton_RecordStream->setCheckable(true);
+    ui->actionEsconder_Caja_de_Texto->setText("Mostrar Caja de Texto");
+    ui->actionEsconder_Caja_de_Texto->setChecked(true);
+    ui->actionMostar_todos_los_datos->setText("Mostrar Todos los Datos");
+    ui->actionPropiedades_de_Puerto->setText("Propiedades de Puerto...");
+
+    ui->toolBar->clear();
+    ui->toolBar->addAction(ui->actionConnect);
+    ui->toolBar->addAction(ui->actionPause_Plot);
+    ui->toolBar->addAction(ui->actionDisconnect);
+    ui->toolBar->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    ui->toolBar_2->setVisible(false);
+
+    auto *actionSalir = new QAction("Salir", this);
+    actionSalir->setShortcut(QKeySequence::Quit);
+    connect(actionSalir, &QAction::triggered, this, &MainWindow::on_actionSalir_triggered);
+
+    auto *actionAutoScaleY = new QAction("AutoScale en Y", this);
+    connect(actionAutoScaleY, &QAction::triggered, this, &MainWindow::on_actionAutoScale_en_Y_triggered);
+
+    auto *actionExportData = new QAction("Exportar datos...", this);
+    connect(actionExportData, &QAction::triggered, this, &MainWindow::on_actionExportar_datos_triggered);
+
+    auto *actionRecordingProps = new QAction("Propiedades de grabación...", this);
+    connect(actionRecordingProps, &QAction::triggered, this, &MainWindow::on_actionPropiedades_de_grabacion_triggered);
+
+    auto *actionManual = new QAction("Manual de Usuario", this);
+    connect(actionManual, &QAction::triggered, this, &MainWindow::on_actionManual_de_Usuario_triggered);
+
+    auto *actionAbout = new QAction("Acerca de...", this);
+    connect(actionAbout, &QAction::triggered, this, &MainWindow::on_actionAcerca_de_triggered);
+
+    connect(ui->actionPropiedades_de_Puerto, &QAction::triggered, this, &MainWindow::on_actionPropiedades_de_Puerto_triggered);
+    connect(ui->actionMostar_todos_los_datos, &QAction::toggled, this, &MainWindow::on_actionMostar_todos_los_datos_toggled);
+
+    ui->menuBar->clear();
+
+    QMenu *menuPuertoSerial = ui->menuBar->addMenu("Puerto Serial");
+    menuPuertoSerial->addAction(ui->actionConnect);
+    menuPuertoSerial->addAction(ui->actionDisconnect);
+    menuPuertoSerial->addAction(ui->actionPropiedades_de_Puerto);
+    // Profile actions
+    auto *actionSaveProfile = new QAction("Guardar Perfil...", this);
+    connect(actionSaveProfile, &QAction::triggered, this, &MainWindow::on_actionSave_Profile_triggered);
+    auto *actionLoadProfile = new QAction("Cargar Perfil...", this);
+    connect(actionLoadProfile, &QAction::triggered, this, &MainWindow::on_actionLoad_Profile_triggered);
+    auto *actionManageProfiles = new QAction("Gestionar Perfiles...", this);
+    connect(actionManageProfiles, &QAction::triggered, this, &MainWindow::on_actionManage_Profiles_triggered);
+    menuPuertoSerial->addSeparator();
+    menuPuertoSerial->addAction(actionSaveProfile);
+    menuPuertoSerial->addAction(actionLoadProfile);
+    menuPuertoSerial->addAction(actionManageProfiles);
+    menuPuertoSerial->addSeparator();
+    menuPuertoSerial->addAction(actionSalir);
+
+    QMenu *menuVisualizacion = ui->menuBar->addMenu("Visualización");
+    menuVisualizacion->addAction(ui->actionEsconder_Caja_de_Texto);
+    menuVisualizacion->addAction(ui->actionMostar_todos_los_datos);
+    menuVisualizacion->addSeparator();
+    menuVisualizacion->addAction(ui->actionPause_Plot);
+    QMenu *menuControlesGrafico = menuVisualizacion->addMenu("Controles del Gráfico");
+    menuControlesGrafico->addAction(actionAutoScaleY);
+    menuControlesGrafico->addAction(ui->actionClear);
+
+    QMenu *menuGrabacion = ui->menuBar->addMenu("Grabación & Exportación");
+    menuGrabacion->addAction(ui->actionRecord_stream);
+    menuGrabacion->addAction(actionExportData);
+    menuGrabacion->addAction(actionRecordingProps);
+
+    QMenu *menuAyuda = ui->menuBar->addMenu("Ayuda");
+    menuAyuda->addAction(ui->actionHow_to_use);
+    menuAyuda->addAction(actionManual);
+    menuAyuda->addAction(actionAbout);
+
+    setIncomingDataDisplayMode(false);
+    setRecordingControlsState(false);
+}
+
+bool MainWindow::exportPlotData(const QString &filePath) const
+{
+    if (!ui || !ui->plot) {
+        return false;
+    }
+
+    QFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        return false;
+    }
+
+    QTextStream stream(&file);
+    stream.setCodec("UTF-8");
+    stream.setGenerateByteOrderMark(true);
+
+    const int graphCount = ui->plot->graphCount();
+    stream << "Tiempo (s)";
+    for (int i = 0; i < graphCount; ++i) {
+        QString graphName = ui->plot->graph(i)->name();
+        if (graphName.isEmpty()) {
+            graphName = QString("Serie %1").arg(i + 1);
+        }
+        stream << ";" << graphName;
+    }
+    stream << "\n";
+
+    if (graphCount == 0) {
+        return true;
+    }
+
+    QVector<QCPGraphDataContainer::const_iterator> iterators;
+    QVector<QCPGraphDataContainer::const_iterator> ends;
+    iterators.reserve(graphCount);
+    ends.reserve(graphCount);
+
+    for (int i = 0; i < graphCount; ++i) {
+        QSharedPointer<QCPGraphDataContainer> data = ui->plot->graph(i)->data();
+        iterators << data->constBegin();
+        ends << data->constEnd();
+    }
+
+    while (iterators[0] != ends[0]) {
+        stream << QString::number(iterators[0]->key, 'f', 6);
+        for (int i = 0; i < graphCount; ++i) {
+            if (iterators[i] != ends[i]) {
+                stream << ";" << QString::number(iterators[i]->value, 'f', 6);
+                ++iterators[i];
+            } else {
+                stream << ";";
+            }
+        }
+        stream << "\n";
+    }
+
+    return true;
+}
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
@@ -332,9 +870,12 @@ void MainWindow::onPortClosed()
     }
 
     logEvent(EventType::PortClosed, "Puerto serie cerrado");
+    setRecordingControlsState(false);
 
     // Transición de máquina de estados
     setAppState(AppState::Disconnected);
+    // Reset experiment timer when port is closed
+    resetExperimentTimer();
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -549,9 +1090,186 @@ void MainWindow::on_spinPoints_valueChanged (int arg1)
  */
 void MainWindow::on_actionHow_to_use_triggered()
 {
-  helpWindow = new HelpWindow (this);
-  helpWindow->setWindowTitle ("How to use this application");
-  helpWindow->show();
+  HelpWindow *helpDialog = new HelpWindow (this);
+  helpDialog->setAttribute(Qt::WA_DeleteOnClose);
+  helpDialog->setWindowTitle ("How to use this application");
+  helpDialog->show();
+}
+
+/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+void MainWindow::on_actionSalir_triggered()
+{
+    close();
+}
+
+/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+void MainWindow::on_actionPropiedades_de_Puerto_triggered()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle("Propiedades de Puerto");
+
+    QFormLayout *formLayout = new QFormLayout(&dialog);
+
+    QComboBox *portCombo = new QComboBox(&dialog);
+    for (const QSerialPortInfo &port : QSerialPortInfo::availablePorts()) {
+        portCombo->addItem(port.portName());
+    }
+    portCombo->setCurrentText(ui->comboPort->currentText());
+
+    QComboBox *baudCombo = new QComboBox(&dialog);
+    for (int i = 0; i < ui->comboBaud->count(); ++i) {
+        baudCombo->addItem(ui->comboBaud->itemText(i));
+    }
+    baudCombo->setCurrentText(ui->comboBaud->currentText());
+
+    QComboBox *dataBitsCombo = new QComboBox(&dialog);
+    for (int i = 0; i < ui->comboData->count(); ++i) {
+        dataBitsCombo->addItem(ui->comboData->itemText(i));
+    }
+    dataBitsCombo->setCurrentIndex(ui->comboData->currentIndex());
+
+    QComboBox *parityCombo = new QComboBox(&dialog);
+    for (int i = 0; i < ui->comboParity->count(); ++i) {
+        parityCombo->addItem(ui->comboParity->itemText(i));
+    }
+    parityCombo->setCurrentIndex(ui->comboParity->currentIndex());
+
+    QComboBox *stopBitsCombo = new QComboBox(&dialog);
+    for (int i = 0; i < ui->comboStop->count(); ++i) {
+        stopBitsCombo->addItem(ui->comboStop->itemText(i));
+    }
+    stopBitsCombo->setCurrentIndex(ui->comboStop->currentIndex());
+
+    formLayout->addRow("Puerto", portCombo);
+    formLayout->addRow("Baudios", baudCombo);
+    formLayout->addRow("Bits de datos", dataBitsCombo);
+    formLayout->addRow("Paridad", parityCombo);
+    formLayout->addRow("Bits de parada", stopBitsCombo);
+
+    QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, Qt::Horizontal, &dialog);
+    formLayout->addRow(buttonBox);
+
+    connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    if (dialog.exec() == QDialog::Accepted) {
+        ui->comboPort->setCurrentText(portCombo->currentText());
+        ui->comboBaud->setCurrentText(baudCombo->currentText());
+        ui->comboData->setCurrentIndex(dataBitsCombo->currentIndex());
+        ui->comboParity->setCurrentIndex(parityCombo->currentIndex());
+        ui->comboStop->setCurrentIndex(stopBitsCombo->currentIndex());
+
+        if (connected) {
+            ui->statusBar->showMessage("Propiedades actualizadas. Se aplicarán en la próxima reconexión.");
+        } else {
+            ui->statusBar->showMessage("Propiedades de puerto actualizadas.");
+        }
+    }
+}
+
+/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+void MainWindow::on_actionExportar_datos_triggered()
+{
+    if (!ui->plot || ui->plot->graphCount() == 0) {
+        QMessageBox::information(this, "Exportar datos", "No hay datos en el gráfico para exportar.");
+        return;
+    }
+
+    const QString defaultName = QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss") + "_grafico.csv";
+    const QString filePath = QFileDialog::getSaveFileName(
+        this,
+        "Exportar datos",
+        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/" + defaultName,
+        "CSV Files (*.csv);;Todos los archivos (*)"
+    );
+
+    if (filePath.isEmpty()) {
+        return;
+    }
+
+    if (!exportPlotData(filePath)) {
+        QMessageBox::warning(this, "Exportar datos", "No se pudo escribir el archivo de exportación.");
+        return;
+    }
+
+    ui->statusBar->showMessage("Datos exportados a " + filePath);
+}
+
+/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+void MainWindow::on_actionPropiedades_de_grabacion_triggered()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle("Propiedades de grabación");
+
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+    QLabel *summary = new QLabel(&dialog);
+    summary->setWordWrap(true);
+    summary->setText(
+        QString("La grabación CSV usa el mapeo activo y crea un archivo HTML paralelo.\n\nEstado actual: %1")
+            .arg(ui->actionRecord_stream->isChecked() ? "grabación habilitada" : "grabación deshabilitada")
+    );
+    layout->addWidget(summary);
+
+    QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, Qt::Horizontal, &dialog);
+    QAbstractButton *openDocsButton = buttonBox->addButton("Abrir carpeta de documentos", QDialogButtonBox::ActionRole);
+    layout->addWidget(buttonBox);
+
+    connect(openDocsButton, &QAbstractButton::clicked, &dialog, [this]() {
+        const QUrl docsUrl = QUrl::fromLocalFile(QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation));
+        QDesktopServices::openUrl(docsUrl);
+    });
+    connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    dialog.exec();
+}
+
+/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+void MainWindow::on_actionManual_de_Usuario_triggered()
+{
+    const QString candidatePaths[] = {
+        QDir::current().filePath("MANUAL_USUARIO.md"),
+        QDir(QCoreApplication::applicationDirPath()).filePath("../MANUAL_USUARIO.md"),
+        QDir(QCoreApplication::applicationDirPath()).filePath("MANUAL_USUARIO.md")
+    };
+
+    for (const QString &path : candidatePaths) {
+        if (QFileInfo(path).exists()) {
+            QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(path).absoluteFilePath()));
+            return;
+        }
+    }
+
+    QMessageBox::warning(this, "Manual de Usuario", "No se encontró MANUAL_USUARIO.md en el entorno actual.");
+}
+
+/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+void MainWindow::on_actionAcerca_de_triggered()
+{
+    QMessageBox::about(
+        this,
+        "Acerca de Serial Port Plotter",
+        "Serial Port Plotter v2.3.0\n\nHerramienta para visualizar y registrar datos de puerto serie.\nDistribuido bajo GPLv3."
+    );
+}
+
+/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+void MainWindow::on_actionAutoScale_en_Y_triggered()
+{
+    on_pushButton_AutoScale_clicked();
+}
+
+/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+void MainWindow::on_actionMostar_todos_los_datos_toggled(bool checked)
+{
+    setIncomingDataDisplayMode(checked);
 }
 
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
@@ -584,7 +1302,11 @@ void MainWindow::on_actionConnect_triggered()
           ui->statusBar->showMessage ("Plot restarted!");
 
           // Transición de máquina de estados
-          setAppState(AppState::Acquiring);
+                    setAppState(AppState::Acquiring);
+                    // Resume experiment timer when acquisition starts only if recording active
+                    if (ui->actionRecord_stream->isChecked()) {
+                        resumeExperimentTimer();
+                    }
         }
     }
   else
@@ -604,21 +1326,21 @@ void MainWindow::on_actionConnect_triggered()
         case 0:
           dataBits = QSerialPort::Data8;
           break;
-        default:
-          dataBits = QSerialPort::Data7;
-        }
+                default:
+                    dataBits = QSerialPort::Data7;
+                }
 
-      switch (parityIndex)
-        {
-        case 0:
-          parity = QSerialPort::NoParity;
-          break;
-        case 1:
-          parity = QSerialPort::OddParity;
-          break;
-        default:
-          parity = QSerialPort::EvenParity;
-        }
+            switch (parityIndex)
+                {
+                case 0:
+                    parity = QSerialPort::NoParity;
+                    break;
+                case 1:
+                    parity = QSerialPort::OddParity;
+                    break;
+                default:
+                    parity = QSerialPort::EvenParity;
+                }
 
       switch (stopBitsIndex)
         {
@@ -639,19 +1361,35 @@ void MainWindow::on_actionConnect_triggered()
  */
 void MainWindow::on_actionPause_Plot_triggered()
 {
-  if (plotting)
-    {
-    logEvent(EventType::Stopped, "Pausando adquisición de datos");
-    updateTimer.stop();
-      plotting = false;
-      ui->actionConnect->setEnabled (true);
-      ui->actionPause_Plot->setEnabled (false);
-      ui->statusBar->showMessage ("Plot paused, new data will be ignored");
-      cambiarEstado("PAUSA (Experimento Interrumpido)", "orange");
-
-      // Transición de máquina de estados
-      setAppState(AppState::Paused);
-    }
+    // Toggle behavior: if currently acquiring, pause; if paused, resume.
+    if (m_appState == AppState::Paused || !plotting) {
+                // Resume acquisition
+                logEvent(EventType::Started, "Reanudando adquisición de datos");
+                updateTimer.start();
+                plotting = true;
+                ui->actionConnect->setEnabled(false);
+                ui->actionPause_Plot->setEnabled(true);
+                ui->statusBar->showMessage("Plot resumed, data and CSV saving resumed");
+                cambiarEstado("ADQUISICIÓN (En curso)", "green");
+                setAppState(AppState::Acquiring);
+        // Resume experiment timer only if recording is active
+        if (ui->actionRecord_stream->isChecked()) {
+            resumeExperimentTimer();
+        }
+        } else {
+                // Pause acquisition
+                logEvent(EventType::Stopped, "Pausando adquisición de datos");
+                updateTimer.stop();
+                plotting = false;
+                // Keep the serial port open; allow reconnection via Connect only when disconnected
+                ui->actionConnect->setEnabled(true);
+                ui->actionPause_Plot->setEnabled(true); // keep enabled so user can resume
+                ui->statusBar->showMessage("Plot paused, new data will be ignored");
+                cambiarEstado("PAUSA (Experimento Interrumpido)", "orange");
+                setAppState(AppState::Paused);
+                // Pause experiment timer
+                pauseExperimentTimer();
+        }
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -660,17 +1398,51 @@ void MainWindow::on_actionPause_Plot_triggered()
  */
 void MainWindow::on_actionRecord_stream_triggered()
 {
+    if (!m_csvManager) {
+        ui->statusBar->showMessage("Grabación no disponible: CsvManager no inicializado.");
+        return;
+    }
+
     if (ui->actionRecord_stream->isChecked())
     {
+        if (m_appState == AppState::Disconnected || m_appState == AppState::Fault) {
+            ui->actionRecord_stream->setChecked(false);
+            setRecordingControlsState(false);
+            ui->statusBar->showMessage("Primero enviá datos y conectá el puerto antes de grabar.");
+            return;
+        }
+
+        // Compute desired duration ms from UI and set metadata on CsvManager
+        const qint64 desiredMs = selectedExperimentDurationMs();
+        m_csvManager->setExperimentDurationMs(desiredMs);
         m_csvManager->openCsvFile(this);
         if (!m_csvManager->isOpen()) {
             ui->actionRecord_stream->setChecked(false);
+            setRecordingControlsState(false);
+        } else {
+            setRecordingControlsState(true);
+            if (m_appState == AppState::Acquiring) {
+                startExperimentTimer();
+                ui->statusBar->showMessage("Grabación iniciada.");
+                logEvent(EventType::Started, "Grabación iniciada por usuario");
+            } else {
+                resetExperimentTimer();
+                if (desiredMs > 0) {
+                    experimentCountdownLabel->setText(QString("Restante: %1").arg(formatDurationHms(desiredMs)));
+                }
+                ui->statusBar->showMessage("Grabación armada. Iniciará al comenzar el experimento.");
+                logEvent(EventType::ConfigApplied, "Grabación armada por usuario");
+            }
         }
     }
     else
     {
         m_csvManager->closeCsvFile();
+        setRecordingControlsState(false);
+        resetExperimentTimer();
+        experimentCountdownLabel->setText("");
         ui->statusBar->showMessage("Grabación detenida.");
+        logEvent(EventType::Stopped, "Grabación detenida por usuario");
     }
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
@@ -696,6 +1468,7 @@ void MainWindow::on_actionDisconnect_triggered()
       ui->actionDisconnect->setEnabled(false);
       ui->savePNGButton->setEnabled(false);
       enable_com_controls(true);
+    setRecordingControlsState(false);
 
       receivedData.clear();
       ui->textEdit_UartWindow->append(receivedData);
@@ -707,6 +1480,7 @@ void MainWindow::on_actionDisconnect_triggered()
 
       // Transición de máquina de estados
       setAppState(AppState::Disconnected);
+            resetExperimentTimer();
     }
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
@@ -730,16 +1504,47 @@ void MainWindow::on_actionClear_triggered()
 
 void MainWindow::on_pushButton_ShowallData_clicked()
 {
-    // Alterna entre mostrar el flujo crudo completo o solo mensajes filtrados.
-    if(ui->pushButton_ShowallData->isChecked())
-    {
-        filterDisplayedData = false;
-        ui->pushButton_ShowallData->setText("Filter Incoming Data");
+    setIncomingDataDisplayMode(ui->pushButton_ShowallData->isChecked());
+}
+
+void MainWindow::setIncomingDataDisplayMode(bool showAll)
+{
+    filterDisplayedData = !showAll;
+
+    const QSignalBlocker blockButton(ui->pushButton_ShowallData);
+    const QSignalBlocker blockAction(ui->actionMostar_todos_los_datos);
+
+    ui->pushButton_ShowallData->setChecked(showAll);
+    ui->actionMostar_todos_los_datos->setChecked(showAll);
+    ui->pushButton_ShowallData->setText(showAll ? "Filter Incoming Data" : "Show All Incoming Data");
+}
+
+void MainWindow::setRecordingControlsState(bool recording)
+{
+    const QSignalBlocker blockAction(ui->actionRecord_stream);
+    const QSignalBlocker blockButton(ui->pushButton_RecordStream);
+
+    ui->actionRecord_stream->setChecked(recording);
+    ui->pushButton_RecordStream->setChecked(recording);
+    ui->pushButton_RecordStream->setText(recording ? "Detener grabación" : "Grabar Stream");
+}
+
+qint64 MainWindow::selectedExperimentDurationMs() const
+{
+    if (!ui || !ui->ExperimentDurationNum || !ui->ExperimentDurationUnit) {
+        return 0;
     }
-    else
-    {
-        filterDisplayedData = true;
-        ui->pushButton_ShowallData->setText("Show All Incoming Data");
+
+    const int value = ui->ExperimentDurationNum->value();
+    switch (ui->ExperimentDurationUnit->currentIndex()) {
+    case 0:
+        return qint64(value) * 1000;
+    case 1:
+        return qint64(value) * 60 * 1000;
+    case 2:
+        return qint64(value) * 3600 * 1000;
+    default:
+        return qint64(value) * 1000;
     }
 }
 
@@ -878,16 +1683,9 @@ void MainWindow::on_ResetearDatos_clicked()
 
 void MainWindow::on_actionEsconder_Caja_de_Texto_toggled(bool arg1)
 {
-    // Muestra u oculta el cuadro de texto de UART segun el estado del toggle.
-    if (arg1)
-    {
-        ui->textEdit_UartWindow->setVisible(false);
-        ui->pushButton_TextEditHide->setText("Show TextBox");
-    }
-     else
-     {
-        ui->textEdit_UartWindow->setVisible(true);
-    }
+    // Cuando está marcado, el cuadro de texto se muestra.
+    ui->textEdit_UartWindow->setVisible(arg1);
+    ui->pushButton_TextEditHide->setText(arg1 ? "Hide TextBox" : "Show TextBox");
 }
 
 void MainWindow::on_ir_a_grafico_clicked()
@@ -931,42 +1729,36 @@ void MainWindow::actualizarMaximoDeTiempo(int nuevoIndice)
 
         case 2: // s
             nuevoMinimo = 1;          // 1s > 5.6ms
-            // 99,999,999 / 10,000 = 9,999
-            nuevoMaximo = 9999;
-            break;
-
-        case 3: // min
-            nuevoMinimo = 1;
-            // 99,999,999 / 600,000 = 166
-            nuevoMaximo = 166;
-            break;
-
-        case 4: // hs
-            nuevoMinimo = 1;
-            // 99,999,999 / 36,000,000 = 2.77
-            nuevoMaximo = 2; // Máximo 2 horas
+            nuevoMaximo = 2147483647;
             break;
 
         default:
             nuevoMinimo = 1;
-            nuevoMaximo = 99999;
+            nuevoMaximo = 2147483647;
+            break;
     }
 
+    if (nuevoValor < nuevoMinimo) {
+        nuevoValor = nuevoMinimo;
+    }
+    if (nuevoValor > nuevoMaximo) {
+        nuevoValor = nuevoMaximo;
+    }
+
+    ui->TiempoNum->blockSignals(true);
     ui->TiempoNum->setRange(nuevoMinimo, nuevoMaximo);
     ui->TiempoNum->setValue(nuevoValor);
+    ui->TiempoNum->blockSignals(false);
 
     indiceUnidadAnterior = nuevoIndice;
-    
-    // Marcar cambios pendientes cuando cambia unidad de tiempo
     markPendingChanges();
 }
+void MainWindow::on_Delay_C_valueChanged(int arg1)        { m_fpgaProtocol->setDelayC(static_cast<quint8>(arg1)); markPendingChanges(); }
+void MainWindow::on_Delay_D_valueChanged(int arg1)        { m_fpgaProtocol->setDelayD(static_cast<quint8>(arg1)); markPendingChanges(); }
 
-// Propaga cambios de controles de timing hacia la configuracion del protocolo FPGA.
 void MainWindow::on_Ancho_de_pulso_valueChanged(int arg1) { m_fpgaProtocol->setPulseWidth(static_cast<quint8>(arg1)); markPendingChanges(); }
 void MainWindow::on_Delay_A_valueChanged(int arg1)        { m_fpgaProtocol->setDelayA(static_cast<quint8>(arg1)); markPendingChanges(); }
 void MainWindow::on_Delay_B_valueChanged(int arg1)        { m_fpgaProtocol->setDelayB(static_cast<quint8>(arg1)); markPendingChanges(); }
-void MainWindow::on_Delay_C_valueChanged(int arg1)        { m_fpgaProtocol->setDelayC(static_cast<quint8>(arg1)); markPendingChanges(); }
-void MainWindow::on_Delay_D_valueChanged(int arg1)        { m_fpgaProtocol->setDelayD(static_cast<quint8>(arg1)); markPendingChanges(); }
 
 void MainWindow::actualizarEstadoGraf(int indiceBotonPresionado)
 {
@@ -1086,11 +1878,7 @@ void MainWindow::updateUIForState()
     const bool isPaused = (m_appState == AppState::Paused);
     const bool isFault = (m_appState == AppState::Fault);
 
-    // Habilitar/deshabilitar controles según el estado
-    bool canConfigure = isReadyForConfig || isReadyForExecution || isPaused;
-    bool canExecute = isReadyForExecution;
-    bool canPause = isAcquiring;
-    bool canResume = isPaused;
+    const bool canConfigure = (isReadyForConfig || isReadyForExecution || isPaused) && !isFault;
 
     // Controles de puerto COM
     ui->comboPort->setEnabled(isDisconnected);
@@ -1100,28 +1888,51 @@ void MainWindow::updateUIForState()
     ui->comboStop->setEnabled(isDisconnected);
 
     // Botones de acción principal
-    ui->actionConnect->setEnabled(isDisconnected || canResume);
+    ui->actionConnect->setEnabled(isDisconnected || isReadyForExecution);
     ui->actionDisconnect->setEnabled(!isDisconnected && !isFault);
-    ui->actionPause_Plot->setEnabled(canPause);
+    ui->actionPause_Plot->setEnabled(isAcquiring);
 
     // Controles de configuración
-    bool enableConfig = canConfigure && !isFault;
-    for (auto btn : botonesGraf) btn->setEnabled(enableConfig);
-    for (auto btn : botonesDatos) btn->setEnabled(enableConfig);
-    ui->TiempoNum->setEnabled(enableConfig);
-    ui->TiempoBox->setEnabled(enableConfig);
-    ui->Ancho_de_pulso->setEnabled(enableConfig);
-    ui->Delay_A->setEnabled(enableConfig);
-    ui->Delay_B->setEnabled(enableConfig);
-    ui->Delay_C->setEnabled(enableConfig);
-    ui->Delay_D->setEnabled(enableConfig);
+    ui->GRAF_1->setEnabled(canConfigure);
+    ui->GRAF_2->setEnabled(canConfigure);
+    ui->GRAF_3->setEnabled(canConfigure);
+    ui->GRAF_4->setEnabled(canConfigure);
+    ui->GRAF_5->setEnabled(canConfigure);
+    ui->GRAF_6->setEnabled(canConfigure);
+    ui->GRAF_7->setEnabled(canConfigure);
+    ui->GRAF_8->setEnabled(canConfigure);
+    for (QPushButton *btn : botonesDatos) {
+        btn->setEnabled(canConfigure);
+    }
+    ui->TiempoNum->setEnabled(canConfigure);
+    ui->TiempoBox->setEnabled(canConfigure);
+    ui->Ancho_de_pulso->setEnabled(canConfigure);
+    ui->Delay_A->setEnabled(canConfigure);
+    ui->Delay_B->setEnabled(canConfigure);
+    ui->Delay_C->setEnabled(canConfigure);
+    ui->Delay_D->setEnabled(canConfigure);
 
     // Botones de envío/reset
-    ui->EnviarDatos->setEnabled(enableConfig);
-    ui->ResetearDatos->setEnabled(enableConfig && (isReadyForConfig || isPaused));
+    ui->EnviarDatos->setEnabled(canConfigure);
+    ui->ResetearDatos->setEnabled(canConfigure && (isReadyForConfig || isPaused));
 
     // Grabación CSV
-    ui->actionRecord_stream->setEnabled(isAcquiring || isPaused);
+    const bool canRecord = isReadyForExecution || isAcquiring || isPaused;
+    ui->actionRecord_stream->setEnabled(canRecord);
+    ui->pushButton_RecordStream->setEnabled(canRecord);
+
+    if (experimentCountdownLabel) {
+        const qint64 desiredMs = selectedExperimentDurationMs();
+        if (desiredMs > 0 && (isAcquiring || isPaused || ui->actionRecord_stream->isChecked())) {
+            const qint64 totalMs = m_experimentAccumulatedMs + (m_experimentTimer.isValid() ? m_experimentTimer.elapsed() : 0);
+            const qint64 remainingMs = qMax<qint64>(0, desiredMs - totalMs);
+            experimentCountdownLabel->setText(QString("Restante: %1").arg(formatDurationHms(remainingMs)));
+        } else if (desiredMs > 0 && ui->actionRecord_stream->isChecked()) {
+            experimentCountdownLabel->setText(QString("Restante: %1").arg(formatDurationHms(desiredMs)));
+        } else {
+            experimentCountdownLabel->setText("");
+        }
+    }
 
     // Actualizar mensaje de estado
     QString stateMsg = getStateDisplayName(m_appState);
@@ -1397,170 +2208,6 @@ void MainWindow::exportEventLog(const QString &filePath)
     file.close();
     
     logEvent(EventType::ConfigApplied, "Log exportado a: " + filePath);
-}
-
-/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
-
-// ─── Perfiles Operativos (Config Profiles) ────────────────────────────────
-
-QString MainWindow::getProfilesDirectory() const
-{
-    QString appDir = QCoreApplication::applicationDirPath();
-    QString profilesDir = appDir + "/profiles";
-    
-    QDir dir(profilesDir);
-    if (!dir.exists()) {
-        QDir().mkpath(profilesDir);
-    }
-    
-    return profilesDir;
-}
-
-void MainWindow::saveProfile(const QString &profileName)
-{
-    if (profileName.isEmpty()) {
-        logEvent(EventType::Error, "Nombre de perfil vacío");
-        return;
-    }
-    
-    OperativeProfile profile;
-    profile.name = profileName;
-    profile.matrixButtons = m_fpgaProtocol->getTecla();  // Requiere método en FpgaProtocol
-    profile.pulseWidth = m_fpgaProtocol->getPulseWidth();
-    profile.delayA = m_fpgaProtocol->getDelayA();
-    profile.delayB = m_fpgaProtocol->getDelayB();
-    profile.delayC = m_fpgaProtocol->getDelayC();
-    profile.delayD = m_fpgaProtocol->getDelayD();
-    profile.timeValue = ui->TiempoNum->value();
-    profile.timeUnitIndex = ui->TiempoBox->currentIndex();
-    profile.createdTimestamp = QDateTime::currentMSecsSinceEpoch();
-    
-    QString filePath = getProfilesDirectory() + "/" + profileName + ".json";
-    QFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        logEvent(EventType::Error, "No se pudo guardar perfil: " + profileName);
-        return;
-    }
-    
-    file.write(profile.toJson().toUtf8());
-    file.close();
-    
-    logEvent(EventType::ConfigApplied, "Perfil guardado: " + profileName);
-}
-
-void MainWindow::loadProfile(const QString &profileName)
-{
-    QString filePath = getProfilesDirectory() + "/" + profileName + ".json";
-    QFile file(filePath);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        logEvent(EventType::Error, "No se pudo cargar perfil: " + profileName);
-        return;
-    }
-    
-    QString json = QString::fromUtf8(file.readAll());
-    file.close();
-    
-    OperativeProfile profile = OperativeProfile::fromJson(json);
-    
-    // Aplicar configuración
-    if (!profile.name.isEmpty()) {
-        // Actualizar matriz
-        for (int i = 0; i < qMin(32, profile.matrixButtons.size()); ++i) {
-            if (botonesDatos.size() > i) {
-                if (profile.matrixButtons.testBit(i) != (botonesDatos[i]->styleSheet().contains("15, 125, 15"))) {
-                    actualizarBotonDato(i, botonesDatos[i]);
-                }
-            }
-        }
-        
-        // Actualizar parámetros de timing
-        ui->Ancho_de_pulso->setValue(profile.pulseWidth);
-        ui->Delay_A->setValue(profile.delayA);
-        ui->Delay_B->setValue(profile.delayB);
-        ui->Delay_C->setValue(profile.delayC);
-        ui->Delay_D->setValue(profile.delayD);
-        ui->TiempoBox->setCurrentIndex(profile.timeUnitIndex);
-        ui->TiempoNum->setValue(profile.timeValue);
-        
-        logEvent(EventType::ConfigApplied, "Perfil cargado: " + profileName);
-    }
-}
-
-void MainWindow::deleteProfile(const QString &profileName)
-{
-    QString filePath = getProfilesDirectory() + "/" + profileName + ".json";
-    if (QFile::remove(filePath)) {
-        logEvent(EventType::ConfigApplied, "Perfil eliminado: " + profileName);
-    } else {
-        logEvent(EventType::Error, "No se pudo eliminar perfil: " + profileName);
-    }
-}
-
-QStringList MainWindow::getProfileNames() const
-{
-    QStringList names;
-    QDir dir(getProfilesDirectory());
-    QStringList filters;
-    filters << "*.json";
-    dir.setNameFilters(filters);
-    
-    foreach (QString filename, dir.entryList()) {
-        names << filename.left(filename.length() - 5);  // Quitar .json
-    }
-    
-    return names;
-}
-
-// ─── Implementación de Serialización de Perfil ─────────────────────────────
-
-QString MainWindow::OperativeProfile::toJson() const
-{
-    QJsonObject obj;
-    obj["name"] = name;
-    obj["pulseWidth"] = (int)pulseWidth;
-    obj["delayA"] = (int)delayA;
-    obj["delayB"] = (int)delayB;
-    obj["delayC"] = (int)delayC;
-    obj["delayD"] = (int)delayD;
-    obj["timeValue"] = timeValue;
-    obj["timeUnitIndex"] = timeUnitIndex;
-    obj["createdTimestamp"] = (qint64)createdTimestamp;
-    
-    // Serializar matriz de bits
-    QString matrixStr;
-    for (int i = 0; i < matrixButtons.size(); ++i) {
-        matrixStr += matrixButtons.testBit(i) ? "1" : "0";
-    }
-    obj["matrixButtons"] = matrixStr;
-    
-    QJsonDocument doc(obj);
-    return QString::fromUtf8(doc.toJson());
-}
-
-MainWindow::OperativeProfile MainWindow::OperativeProfile::fromJson(const QString &json)
-{
-    OperativeProfile profile;
-    QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
-    QJsonObject obj = doc.object();
-    
-    profile.name = obj["name"].toString();
-    profile.pulseWidth = (quint8)obj["pulseWidth"].toInt();
-    profile.delayA = (quint8)obj["delayA"].toInt();
-    profile.delayB = (quint8)obj["delayB"].toInt();
-    profile.delayC = (quint8)obj["delayC"].toInt();
-    profile.delayD = (quint8)obj["delayD"].toInt();
-    profile.timeValue = obj["timeValue"].toInt();
-    profile.timeUnitIndex = obj["timeUnitIndex"].toInt();
-    profile.createdTimestamp = (qint64)obj["createdTimestamp"].toInt();
-    
-    // Deserializar matriz de bits
-    QString matrixStr = obj["matrixButtons"].toString();
-    profile.matrixButtons.resize(32);
-    for (int i = 0; i < qMin(32, matrixStr.size()); ++i) {
-        profile.matrixButtons.setBit(i, matrixStr[i] == '1');
-    }
-    
-    return profile;
 }
 
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */

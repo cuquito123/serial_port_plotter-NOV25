@@ -6,6 +6,7 @@
 #include <QTextStream>
 #include <QStringList>
 #include <QVector>
+#include <QDateTime>
 
 class FpgaProtocol;
 
@@ -56,6 +57,14 @@ private:
     // Mapeo fijo de 8 columnas
     QVector<int> m_csvTramaIdx;
     QStringList m_csvLabels;
+    // Metadata de experimento (duración en ms). 0 = none
+    qint64 m_experimentDurationMs = 0;
+    // Timestamp de inicio del experimento (para header/footer)
+    QDateTime m_experimentStart;
+
+public:
+    // Establece la duración del experimento (ms) para escribir en el header
+    void setExperimentDurationMs(qint64 durationMs) { m_experimentDurationMs = durationMs; }
 };
 
 #endif // CSVMANAGER_HPP

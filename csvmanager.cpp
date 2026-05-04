@@ -64,6 +64,9 @@ bool CsvManager::openCsvFile(QWidget *parent)
     m_csvStream->setCodec("UTF-8");
     m_csvStream->setGenerateByteOrderMark(true);
 
+    // Record start timestamp for metadata
+    m_experimentStart = QDateTime::currentDateTime();
+
     // Salida visual adicional: HTML con formato y colores.
     const QFileInfo csvInfo(filePath);
     const QString htmlPath = csvInfo.path() + "/" + csvInfo.completeBaseName() + "_formato.html";
@@ -92,6 +95,16 @@ bool CsvManager::openCsvFile(QWidget *parent)
 void CsvManager::closeCsvFile()
 {
     if (!m_csvFile) return;
+
+    // Write footer metadata with end time and actual duration
+    if (m_csvStream) {
+        QDateTime endTime = QDateTime::currentDateTime();
+        qint64 actualSecs = m_experimentStart.isValid() ? m_experimentStart.secsTo(endTime) : 0;
+        *m_csvStream << "#\n";
+        *m_csvStream << "# End Time: " << endTime.toString("yyyy-MM-dd HH:mm:ss") << "\n";
+        *m_csvStream << "# Actual Duration (s): " << QString::number(actualSecs) << "\n";
+        m_csvStream->flush();
+    }
 
     if (m_csvStream) {
         m_csvStream->flush();
@@ -179,6 +192,12 @@ void CsvManager::buildHeaders()
     // Metadata
     *m_csvStream << "# Experimento: Serial Port Plotter v2.3.0\n";
     *m_csvStream << "# Fecha: " << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss") << "\n";
+    if (m_experimentDurationMs > 0) {
+        qint64 secs = m_experimentDurationMs / 1000;
+        *m_csvStream << "# Duración (s): " << QString::number(secs) << "\n";
+    } else {
+        *m_csvStream << "# Duración (s): (sin especificar)\n";
+    }
     *m_csvStream << "# Separador: punto y coma (;)\n";
     *m_csvStream << "#\n";
 
@@ -198,6 +217,10 @@ void CsvManager::buildHeaders()
 
     if (m_htmlStream) {
         buildHtmlHeaders();
+        // Inject start time into HTML meta area if available
+        if (m_experimentStart.isValid()) {
+            *m_htmlStream << "  <p class=\"meta\">Start Time: " << m_experimentStart.toString("yyyy-MM-dd HH:mm:ss").toHtmlEscaped() << "</p>\n";
+        }
     }
 }
 

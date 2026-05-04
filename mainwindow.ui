@@ -968,6 +968,34 @@
             </item>
             <item><widget class="QSpinBox" name="TiempoNum"/></item>
             <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_experimentDuration">
+              <item>
+               <widget class="QLabel" name="label_experimentDuration">
+                <property name="text"><string>Duración (exp)</string></property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QSpinBox" name="ExperimentDurationNum">
+                <property name="minimum"><number>0</number></property>
+                <property name="maximum"><number>1000000</number></property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QComboBox" name="ExperimentDurationUnit">
+                <item><property name="text"><string>Segundos</string></property></item>
+                <item><property name="text"><string>Minutos</string></property></item>
+                <item><property name="text"><string>Horas</string></property></item>
+               </widget>
+              </item>
+               <item>
+                <widget class="QPushButton" name="pushButton_RecordStream">
+                 <property name="text"><string>Grabar Stream</string></property>
+                 <property name="checkable"><bool>true</bool></property>
+                </widget>
+               </item>
+             </layout>
+            </item>
+            <item>
              <widget class="QTextEdit" name="textEdit_UartWindow">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Expanding" vsizetype="Expanding">

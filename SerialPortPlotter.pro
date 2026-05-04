@@ -23,7 +23,8 @@ SOURCES += main.cpp\
         serialmessageparser.cpp \
         fpgaprotocol.cpp \
         plotmanager.cpp \
-        csvmanager.cpp
+        csvmanager.cpp \
+        profilemanager.cpp
 
 HEADERS  += mainwindow.hpp \
         console.h \
@@ -33,7 +34,8 @@ HEADERS  += mainwindow.hpp \
         serialmessageparser.hpp \
         fpgaprotocol.hpp \
         plotmanager.hpp \
-        csvmanager.hpp
+        csvmanager.hpp \
+        profilemanager.hpp
 
 
 FORMS    += mainwindow.ui \

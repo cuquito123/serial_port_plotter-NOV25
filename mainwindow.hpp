@@ -30,9 +30,11 @@
 #include <QMainWindow>
 #include <QtSerialPort/QtSerialPort>
 #include <QSerialPortInfo>
+#include <QElapsedTimer>
+#include <QTimer>
+#include <QLabel>
 #include "helpwindow.hpp"
 #include "qcustomplot/qcustomplot.h"
-#include <QBitArray>
 #include <QVector>
 
 // Máquina de estados operativa de la aplicación
@@ -100,6 +102,15 @@ private slots:
     void on_actionPause_Plot_triggered();
     void on_actionClear_triggered();
     void on_actionRecord_stream_triggered();
+    void on_actionSalir_triggered();
+    void on_actionPropiedades_de_Puerto_triggered();
+    void on_actionExportar_datos_triggered();
+    void on_actionManage_Profiles_triggered();
+    void on_actionPropiedades_de_grabacion_triggered();
+    void on_actionManual_de_Usuario_triggered();
+    void on_actionAcerca_de_triggered();
+    void on_actionAutoScale_en_Y_triggered();
+    void on_actionMostar_todos_los_datos_toggled(bool checked);
 
 //    void on_pushButton_TextEditHide_clicked();
 
@@ -162,6 +173,9 @@ signals:
     void newData(QStringList data);                                                       // Emitida al recibir una trama parseada
 
 private:
+    // Profile UI actions
+    void on_actionSave_Profile_triggered();
+    void on_actionLoad_Profile_triggered();
     Ui::MainWindow *ui;
 
     /* Indicador visual de estado en la barra inferior */
@@ -203,12 +217,28 @@ private:
 
     QTimer updateTimer;                                                                   // Temporizador de refresco del grafico
     QTime timeOfFirstData;                                                                // Marca temporal del primer dato recibido
+    // Experimento: tiempo transcurrido con pausa/reanudar
+    QElapsedTimer m_experimentTimer;                                                       // Temporizador de alta resolución
+    qint64 m_experimentAccumulatedMs = 0;                                                   // Milisegundos acumulados antes de la pausa
+    QTimer m_experimentUpdateTimer;                                                        // Timer para actualizar la UI con tiempo transcurrido
+    QLabel *experimentTimeLabel = nullptr;                                                 // Etiqueta mostrada en la statusBar
+    QLabel *experimentCountdownLabel = nullptr;                                            // Etiqueta para countdown restante
+    void startExperimentTimer();                                                           // Inicia y reinicia el temporizador
+    void pauseExperimentTimer();                                                           // Pausa (acumula tiempo)
+    void resumeExperimentTimer();                                                          // Reanuda sin resetear acumulado
+    void resetExperimentTimer();                                                           // Resetea todo
+    void updateExperimentTimeLabel();                                                      // Actualiza etiqueta con formato hh:mm:ss
     double timeBetweenSamples;                                                            // Intervalo estimado entre muestras
     QString receivedData;                                                                 // Buffer de texto para UART
     HelpWindow *helpWindow;
     void createUI();                                                                      // Inicializa y rellena controles de UI
     void enable_com_controls (bool enable);                                               // Habilita/deshabilita controles de COM
     void setupPlot();                                                                     // Inicializa el area de grafico
+    void buildMenus();                                                                    // Reconstruye la barra de menues con la estructura actual
+    bool exportPlotData(const QString &filePath) const;                                    // Exporta el contenido actual del plot a CSV
+    void setIncomingDataDisplayMode(bool showAll);                                         // Sincroniza el modo de visualizacion de datos crudos
+    void setRecordingControlsState(bool recording);                                        // Sincroniza el estado visual del boton y la accion de grabacion
+    qint64 selectedExperimentDurationMs() const;                                           // Convierte la duracion elegida en UI a milisegundos
                                                                                           // Abre el puerto serie interno con estos parametros
     void openPort(QSerialPortInfo portInfo, int baudRate, QSerialPort::DataBits dataBits, QSerialPort::Parity parity, QSerialPort::StopBits stopBits);
     Console *m_console = nullptr;
@@ -325,29 +355,6 @@ private:
     QString getEventLogAsString(int maxEntries = 50) const;
     void clearEventLog();
     void exportEventLog(const QString &filePath);
-
-    // ─── Perfiles Operativos (Config Profiles) ────────────────────────────────────
-    struct OperativeProfile {
-        QString name;
-        QBitArray matrixButtons;           // Estado de 32 botones
-        quint8 pulseWidth;
-        quint8 delayA, delayB, delayC, delayD;
-        int timeValue;
-        int timeUnitIndex;
-        qint64 createdTimestamp;
-        
-        // Serialización a JSON para guardar
-        QString toJson() const;
-        static OperativeProfile fromJson(const QString &json);
-    };
-    
-    QList<OperativeProfile> m_savedProfiles;
-    
-    void saveProfile(const QString &profileName);
-    void loadProfile(const QString &profileName);
-    void deleteProfile(const QString &profileName);
-    QStringList getProfileNames() const;
-    QString getProfilesDirectory() const;
 
 };
 

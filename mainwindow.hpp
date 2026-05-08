@@ -221,6 +221,7 @@ private:
     QElapsedTimer m_experimentTimer;                                                       // Temporizador de alta resolución
     qint64 m_experimentAccumulatedMs = 0;                                                   // Milisegundos acumulados antes de la pausa
     QTimer m_experimentUpdateTimer;                                                        // Timer para actualizar la UI con tiempo transcurrido
+    bool m_experimentFinished = false;                                                     // Marca fin natural por duración alcanzada
     QLabel *experimentTimeLabel = nullptr;                                                 // Etiqueta mostrada en la statusBar
     QLabel *experimentCountdownLabel = nullptr;                                            // Etiqueta para countdown restante
     void startExperimentTimer();                                                           // Inicia y reinicia el temporizador

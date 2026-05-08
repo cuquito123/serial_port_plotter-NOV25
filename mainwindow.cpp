@@ -540,6 +540,19 @@ void MainWindow::updateExperimentTimeLabel()
     QString text = QString("Exp: %1:%2:%3").arg(hrs,2,10,QChar('0')).arg(mins,2,10,QChar('0')).arg(secs,2,10,QChar('0'));
     if (experimentTimeLabel) experimentTimeLabel->setText(text);
 
+    // Actualizar countdown de duración restante
+    if (experimentCountdownLabel && ui && ui->ExperimentDurationNum && ui->ExperimentDurationUnit) {
+        qint64 desiredMs = selectedExperimentDurationMs();
+        if (desiredMs > 0 && (m_appState == AppState::Acquiring || (m_appState == AppState::Paused && ui->actionRecord_stream->isChecked()))) {
+            const qint64 remainingMs = qMax<qint64>(0, desiredMs - totalMs);
+            experimentCountdownLabel->setText(QString("Restante: %1").arg(formatDurationHms(remainingMs)));
+        } else if (desiredMs > 0 && ui->actionRecord_stream->isChecked() && m_appState != AppState::Acquiring && m_appState != AppState::Paused) {
+            experimentCountdownLabel->setText(QString("Restante: %1").arg(formatDurationHms(desiredMs)));
+        } else if (m_appState != AppState::Acquiring && m_appState != AppState::Paused) {
+            experimentCountdownLabel->setText("");
+        }
+    }
+
     // If the user configured a duration, and we've reached it, auto-pause acquisition
     if (ui && ui->ExperimentDurationNum && ui->ExperimentDurationUnit) {
         qint64 desiredMs = 0;
@@ -561,16 +574,24 @@ void MainWindow::updateExperimentTimeLabel()
                 updateTimer.stop();
                 plotting = false;
                 pauseExperimentTimer();
-                ui->statusBar->showMessage("Duración alcanzada: adquisición pausada");
                 cambiarEstado(finishedMsg, "blue");
                 // Stop recording and close CSV cleanly
-                if (m_csvManager && m_csvManager->isOpen()) {
+                const bool csvWasOpen = (m_csvManager && m_csvManager->isOpen());
+                if (csvWasOpen) {
                     m_csvManager->closeCsvFile();
+                    const QSignalBlocker blockRecordAction(ui->actionRecord_stream);
                     ui->actionRecord_stream->setChecked(false);
                 }
                 setRecordingControlsState(false);
                 experimentCountdownLabel->setText(QString("Finalizado: %1").arg(formatDurationHms(desiredMs)));
-                setAppState(AppState::ReadyForExecution);
+                m_experimentFinished = true;
+                if (csvWasOpen) {
+                    ui->statusBar->showMessage("Duración alcanzada: experimento finalizado y CSV guardado automáticamente");
+                } else {
+                    ui->statusBar->showMessage("Duración alcanzada: experimento finalizado");
+                }
+                cambiarEstado("EXPERIMENTO FINALIZADO (tiempo alcanzado)", "blue");
+                setAppState(AppState::Paused);
             }
         }
     }
@@ -586,6 +607,7 @@ MainWindow::~MainWindow()
     if (m_csvManager) {
         m_csvManager->closeCsvFile();
     }
+    delete m_fpgaProtocolApplied;
     delete m_fpgaProtocol;
     delete m_console;
     delete ui;
@@ -898,7 +920,7 @@ void MainWindow::portOpenedSuccess()
     if (m_plotManager) {
         m_plotManager->setupPlot();
     }
-    ui->statusBar->showMessage ("Connected!");
+    ui->statusBar->showMessage("Puerto abierto. Presiona 'Enviar Datos' para configurar e iniciar.");
     
     logEvent(EventType::PortOpened, "Conexión exitosa al puerto serie");
     resetHealthMetrics();
@@ -936,12 +958,12 @@ void MainWindow::portOpenedSuccess()
     ui->C8_30->setStyleSheet("background-color: rgb(150, 50, 50);");
     ui->D8_31->setStyleSheet("background-color: rgb(150, 50, 50);");
     enable_com_controls(false);
-    updateTimer.start(20);
     connected = true;
-    plotting = true;
+    plotting = false;  // NO iniciar plotting aqui. Esperar a EnviarDatos
 
-    // Transición de máquina de estados
+    // Transicion de maquina de estados
     setAppState(AppState::ReadyForConfiguration);
+    cambiarEstado("LISTO PARA CONFIGURAR. Presiona 'Enviar Datos'.", "blue");
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -1275,43 +1297,21 @@ void MainWindow::on_actionMostar_todos_los_datos_toggled(bool checked)
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Conecta al puerto COM o reinicia el ploteo si ya estaba conectado.
+ * @brief Conecta al puerto COM.
+ * Nuevo flujo: Conectar abre puerto → Enviar Datos auto-inicia adquisición
  */
 void MainWindow::on_actionConnect_triggered()
 {
   if (connected)
     {
-            /* Si ya esta conectado, reinicia si estaba pausado */
-      if (!plotting)
-                {
-                    // Preflight check antes de reanudar adquisición
-                    PreflightResult check = performPreflightCheck();
-                    if (!check.success) {
-                        logEvent(EventType::Error, "Preflight check fallido al reanudar: " + check.errorMessage);
-                        setAppState(AppState::Fault);
-                        ui->statusBar->showMessage(check.errorMessage);
-                        cambiarEstado("FALLA: " + check.errorMessage, "red");
-                        return;
-                    }
-
-                    logEvent(EventType::Started, "Iniciando adquisición de datos");
-                    updateTimer.start();
-          plotting = true;
-          ui->actionConnect->setEnabled (false);
-          ui->actionPause_Plot->setEnabled (true);
-          ui->statusBar->showMessage ("Plot restarted!");
-
-          // Transición de máquina de estados
-                    setAppState(AppState::Acquiring);
-                    // Resume experiment timer when acquisition starts only if recording active
-                    if (ui->actionRecord_stream->isChecked()) {
-                        resumeExperimentTimer();
-                    }
-        }
+            /* Si ya está conectado y pausado, usa Pausa/Reanuda para continuar */
+            // Esta rama es para casos de reconexión después de pausa
+            // Pero normalmente no se alcanza porque Pausa/Reanuda maneja todo
+            return;
     }
   else
     {
-    /* Si no esta conectado, toma parametros de UI y conecta */
+    /* Si no está conectado, abre el puerto */
     QSerialPortInfo portInfo (ui->comboPort->currentText());
     int baudRate = ui->comboBaud->currentText().toInt();
     int dataBitsIndex = ui->comboData->currentIndex();
@@ -1351,6 +1351,7 @@ void MainWindow::on_actionConnect_triggered()
           stopBits = QSerialPort::TwoStop;
         }
 
+      logEvent(EventType::PortOpened, "Abriendo puerto");
       openPort (portInfo, baudRate, dataBits, parity, stopBits);
   }
 }
@@ -1362,14 +1363,19 @@ void MainWindow::on_actionConnect_triggered()
 void MainWindow::on_actionPause_Plot_triggered()
 {
     // Toggle behavior: if currently acquiring, pause; if paused, resume.
+    if (m_experimentFinished) {
+        ui->statusBar->showMessage("El experimento ya finalizó. Reconfigurá o enviá nuevos datos para comenzar otro ciclo.");
+        cambiarEstado("EXPERIMENTO FINALIZADO", "blue");
+        setAppState(AppState::Paused);
+        return;
+    }
+
     if (m_appState == AppState::Paused || !plotting) {
                 // Resume acquisition
                 logEvent(EventType::Started, "Reanudando adquisición de datos");
-                updateTimer.start();
+        updateTimer.start(20);
                 plotting = true;
-                ui->actionConnect->setEnabled(false);
-                ui->actionPause_Plot->setEnabled(true);
-                ui->statusBar->showMessage("Plot resumed, data and CSV saving resumed");
+        ui->statusBar->showMessage("Plot reanudado. La adquisición y la grabación continúan.");
                 cambiarEstado("ADQUISICIÓN (En curso)", "green");
                 setAppState(AppState::Acquiring);
         // Resume experiment timer only if recording is active
@@ -1381,10 +1387,7 @@ void MainWindow::on_actionPause_Plot_triggered()
                 logEvent(EventType::Stopped, "Pausando adquisición de datos");
                 updateTimer.stop();
                 plotting = false;
-                // Keep the serial port open; allow reconnection via Connect only when disconnected
-                ui->actionConnect->setEnabled(true);
-                ui->actionPause_Plot->setEnabled(true); // keep enabled so user can resume
-                ui->statusBar->showMessage("Plot paused, new data will be ignored");
+        ui->statusBar->showMessage("Plot pausado. Presiona 'Pausa/Reanuda' para continuar.");
                 cambiarEstado("PAUSA (Experimento Interrumpido)", "orange");
                 setAppState(AppState::Paused);
                 // Pause experiment timer
@@ -1403,6 +1406,15 @@ void MainWindow::on_actionRecord_stream_triggered()
         return;
     }
 
+    const qint64 desiredMs = selectedExperimentDurationMs();
+
+    if (!ui->actionRecord_stream->isChecked() && desiredMs > 0 &&
+        (m_appState == AppState::Acquiring || m_appState == AppState::Paused)) {
+        setRecordingControlsState(true);
+        ui->statusBar->showMessage("La duración del experimento obliga a mantener la grabación activa hasta finalizar.");
+        return;
+    }
+
     if (ui->actionRecord_stream->isChecked())
     {
         if (m_appState == AppState::Disconnected || m_appState == AppState::Fault) {
@@ -1413,7 +1425,6 @@ void MainWindow::on_actionRecord_stream_triggered()
         }
 
         // Compute desired duration ms from UI and set metadata on CsvManager
-        const qint64 desiredMs = selectedExperimentDurationMs();
         m_csvManager->setExperimentDurationMs(desiredMs);
         m_csvManager->openCsvFile(this);
         if (!m_csvManager->isOpen()) {
@@ -1475,8 +1486,8 @@ void MainWindow::on_actionDisconnect_triggered()
 
       limpiarMatrizInterna();
 
-      ui->statusBar->showMessage("Disconnected!");
-      cambiarEstado("DETENIDO (Requiere Rearme)", "red");
+    ui->statusBar->showMessage("Puerto desconectado. La secuencia quedó detenida.");
+    cambiarEstado("DESCONECTADO", "red");
 
       // Transición de máquina de estados
       setAppState(AppState::Disconnected);
@@ -1602,6 +1613,30 @@ void MainWindow::initActionsConnections()
 
 void MainWindow::on_EnviarDatos_clicked()
 {
+    const qint64 desiredMs = selectedExperimentDurationMs();
+
+    m_experimentFinished = false;
+
+    if (m_csvManager) {
+        m_csvManager->setExperimentDurationMs(desiredMs);
+    }
+
+    if (desiredMs > 0) {
+        if (!ui->actionRecord_stream->isChecked()) {
+            setRecordingControlsState(true);
+        }
+
+        if (m_csvManager && !m_csvManager->isOpen()) {
+            if (!m_csvManager->openCsvFile(this)) {
+                setRecordingControlsState(false);
+                ui->statusBar->showMessage("No se pudo iniciar la grabación obligatoria del experimento.");
+                cambiarEstado("GRABACIÓN CANCELADA", "orange");
+                setAppState(AppState::ReadyForConfiguration);
+                return;
+            }
+        }
+    }
+
     // Preflight check
     PreflightResult check = performPreflightCheck();
     if (!check.success) {
@@ -1613,7 +1648,7 @@ void MainWindow::on_EnviarDatos_clicked()
     }
 
     // Aplicar configuración al FPGA
-    cambiarEstado("Aplicando y armando...", "green");
+    cambiarEstado("Aplicando y armando...", "yellow");
     logEvent(EventType::ConfigApplied, "Aplicando configuración al FPGA");
 
     limpiarPlot();
@@ -1638,15 +1673,30 @@ void MainWindow::on_EnviarDatos_clicked()
 
     qDebug() << "Paquete Extendido Enviado:" << packet.toHex();
 
-    // Snapshot: guardar configuración aplicada
-    // (en futuro se puede clonar FpgaProtocol para comparativa)
-
     // Limpiar indicador de cambios pendientes
     clearPendingChanges();
 
+    // ====================================================================
+    // AHORA: Automáticamente inicia adquisición
+    // ====================================================================
+    logEvent(EventType::Started, "Iniciando adquisición de datos");
+    updateTimer.start(20);
+    plotting = true;
+    ui->actionConnect->setEnabled(false);
+    ui->actionPause_Plot->setEnabled(true);
+    ui->statusBar->showMessage("Adquisición iniciada. Presioná 'Pausa/Reanuda' para pausar.");
+
     // Transición de máquina de estados
-    cambiarEstado("Listo para ejecutar. Presioná 'Conectar'.", "blue");
-    setAppState(AppState::ReadyForExecution);
+    cambiarEstado("ADQUISICIÓN (En curso)", "green");
+    setAppState(AppState::Acquiring);
+
+    // Iniciar timer de experimento y countdown si hay grabado habilitado
+    if (ui->actionRecord_stream->isChecked()) {
+        startExperimentTimer();
+    } else {
+        // Aunque no haya grabado, iniciar timer para mostrar countdown
+        startExperimentTimer();
+    }
 }
 void MainWindow::on_ResetearDatos_clicked()
 {
@@ -1888,9 +1938,9 @@ void MainWindow::updateUIForState()
     ui->comboStop->setEnabled(isDisconnected);
 
     // Botones de acción principal
-    ui->actionConnect->setEnabled(isDisconnected || isReadyForExecution);
+    ui->actionConnect->setEnabled(isDisconnected);
     ui->actionDisconnect->setEnabled(!isDisconnected && !isFault);
-    ui->actionPause_Plot->setEnabled(isAcquiring);
+    ui->actionPause_Plot->setEnabled(isAcquiring || isPaused);
 
     // Controles de configuración
     ui->GRAF_1->setEnabled(canConfigure);
@@ -1921,46 +1971,33 @@ void MainWindow::updateUIForState()
     ui->actionRecord_stream->setEnabled(canRecord);
     ui->pushButton_RecordStream->setEnabled(canRecord);
 
-    if (experimentCountdownLabel) {
-        const qint64 desiredMs = selectedExperimentDurationMs();
-        if (desiredMs > 0 && (isAcquiring || isPaused || ui->actionRecord_stream->isChecked())) {
-            const qint64 totalMs = m_experimentAccumulatedMs + (m_experimentTimer.isValid() ? m_experimentTimer.elapsed() : 0);
-            const qint64 remainingMs = qMax<qint64>(0, desiredMs - totalMs);
-            experimentCountdownLabel->setText(QString("Restante: %1").arg(formatDurationHms(remainingMs)));
-        } else if (desiredMs > 0 && ui->actionRecord_stream->isChecked()) {
-            experimentCountdownLabel->setText(QString("Restante: %1").arg(formatDurationHms(desiredMs)));
-        } else {
-            experimentCountdownLabel->setText("");
-        }
-    }
-
     // Actualizar mensaje de estado
     QString stateMsg = getStateDisplayName(m_appState);
     QString color = "black";
 
     switch (m_appState) {
     case AppState::Disconnected:
-        stateMsg += " - Abrí puerto para comenzar";
+        stateMsg += " - Abrí el puerto para comenzar";
         color = "red";
         break;
     case AppState::ReadyForConfiguration:
-        stateMsg += " - Configurá matriz y parámetros";
+        stateMsg += " - Presioná 'Enviar Datos' para iniciar";
         color = "blue";
         break;
     case AppState::ReadyForExecution:
-        stateMsg += " - Presioná 'Conectar' para iniciar";
+        stateMsg += " - Configuración aplicada, listo para un nuevo ciclo";
         color = "green";
         break;
     case AppState::Acquiring:
-        stateMsg += " - Adquisición en progreso";
+        stateMsg += " - Adquisición y guardado en curso";
         color = "darkgreen";
         break;
     case AppState::Paused:
-        stateMsg += " - Reconfigurar o reanudar";
+        stateMsg += " - Pausa activa, presioná 'Pausa/Reanuda' para continuar";
         color = "orange";
         break;
     case AppState::Fault:
-        stateMsg += " - Error detectado, desconectar para recuperar";
+        stateMsg += " - Error detectado, desconectá para recuperar";
         color = "red";
         break;
     }

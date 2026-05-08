@@ -109,7 +109,14 @@ void PlotManager::addDataPoint(double x, const QStringList &newData)
         const int tramIdx = m_activeTramaIndices[grafico];
         if (tramIdx < 0 || tramIdx >= newData.size()) continue;
 
-        m_plot->graph(grafico)->addData(x, newData[tramIdx].toDouble());
+        bool ok = false;
+        const double value = newData[tramIdx].toDouble(&ok);
+        if (!ok) {
+            qDebug() << "PlotManager: invalid numeric value ignored at index" << tramIdx << ":" << newData[tramIdx];
+            continue;
+        }
+
+        m_plot->graph(grafico)->addData(x, value);
     }
 
     m_dataPointNumber++;

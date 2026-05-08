@@ -1036,12 +1036,6 @@
                 <item><property name="text"><string>Horas</string></property></item>
                </widget>
               </item>
-               <item>
-                <widget class="QPushButton" name="pushButton_RecordStream">
-                 <property name="text"><string>Grabar Stream</string></property>
-                 <property name="checkable"><bool>true</bool></property>
-                </widget>
-               </item>
              </layout>
             </item>
             <item>

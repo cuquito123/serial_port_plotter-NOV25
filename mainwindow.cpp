@@ -234,12 +234,6 @@ MainWindow::MainWindow (QWidget *parent) :
           });
       }
 
-      connect(ui->pushButton_RecordStream, &QPushButton::clicked, this, [this]() {
-          const bool nextState = !ui->actionRecord_stream->isChecked();
-          ui->actionRecord_stream->setChecked(nextState);
-          on_actionRecord_stream_triggered();
-      });
-
       actualizarEstadoGraf(columnaSeleccionada);
 
       connect(ui->TiempoBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -688,8 +682,6 @@ void MainWindow::buildMenus()
     ui->actionHow_to_use->setShortcut(QKeySequence::HelpContents);
     ui->actionRecord_stream->setText("Grabar Stream (CSV)");
     ui->actionRecord_stream->setShortcut(QKeySequence::Save);
-    ui->pushButton_RecordStream->setText("Grabar Stream");
-    ui->pushButton_RecordStream->setCheckable(true);
     ui->actionEsconder_Caja_de_Texto->setText("Mostrar Caja de Texto");
     ui->actionEsconder_Caja_de_Texto->setChecked(true);
     ui->actionMostar_todos_los_datos->setText("Mostrar Todos los Datos");
@@ -1533,11 +1525,8 @@ void MainWindow::setIncomingDataDisplayMode(bool showAll)
 void MainWindow::setRecordingControlsState(bool recording)
 {
     const QSignalBlocker blockAction(ui->actionRecord_stream);
-    const QSignalBlocker blockButton(ui->pushButton_RecordStream);
 
     ui->actionRecord_stream->setChecked(recording);
-    ui->pushButton_RecordStream->setChecked(recording);
-    ui->pushButton_RecordStream->setText(recording ? "Detener grabación" : "Grabar Stream");
 }
 
 qint64 MainWindow::selectedExperimentDurationMs() const
@@ -1969,7 +1958,6 @@ void MainWindow::updateUIForState()
     // Grabación CSV
     const bool canRecord = isReadyForExecution || isAcquiring || isPaused;
     ui->actionRecord_stream->setEnabled(canRecord);
-    ui->pushButton_RecordStream->setEnabled(canRecord);
 
     // Actualizar mensaje de estado
     QString stateMsg = getStateDisplayName(m_appState);

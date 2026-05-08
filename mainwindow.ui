@@ -961,14 +961,14 @@
              <widget class="QPushButton" name="pushButton_AutoScale">
               <property name="minimumSize">
                <size>
-          <width>34</width>
-          <height>34</height>
+          <width>56</width>
+          <height>56</height>
                </size>
               </property>
               <property name="maximumSize">
                <size>
-          <width>34</width>
-          <height>34</height>
+          <width>56</width>
+          <height>56</height>
                </size>
               </property>
               <property name="sizePolicy">
@@ -977,11 +977,15 @@
           <verstretch>0</verstretch>
                </sizepolicy>
               </property>
+              <property name="focusPolicy">
+               <enum>Qt::StrongFocus</enum>
+              </property>
               <property name="toolTip">
                <string>AutoScale Y</string>
               </property>
               <property name="text">
-               <string>Y</string>
+               <string>AutoScale
+Y</string>
               </property>
              </widget>
             </item>

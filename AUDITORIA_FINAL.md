@@ -16,6 +16,7 @@ Los tres riesgos técnicos principales ya fueron corregidos en esta misma revisi
 - **Impacto:** Riesgo de congelamiento parcial de la interfaz y degradación de responsividad durante envíos frecuentes o dispositivos lentos.
 - **Recomendación:** Evitar espera activa en el hilo de UI. Usar escritura asíncrona o mover la operación a un hilo dedicado.
 - **Estado:** Corregido. La escritura quedó reducida a una llamada directa a `QSerialPort::write()`.
+- **Verificación:** En `serialportmanager.cpp` la función `writeData()` realiza `m_serialPort->write(data)` sin llamadas a `waitForBytesWritten()`.
 
 ### 2. Parseo numérico sin validación
 - **Severidad:** Media
@@ -23,6 +24,7 @@ Los tres riesgos técnicos principales ya fueron corregidos en esta misma revisi
 - **Impacto:** Datos inválidos podían entrar al gráfico de forma silenciosa y ensuciar la visualización.
 - **Recomendación:** Validar conversión con bandera `ok` y descartar valores no numéricos, contabilizando errores si se requiere trazabilidad.
 - **Estado:** Corregido. Ahora los valores inválidos se ignoran explícitamente.
+- **Verificación:** En `plotmanager.cpp` `addDataPoint()` usa `toDouble(&ok)` y descarta valores cuando `ok` es falso.
 
 ### 3. Fuga de memoria en `MainWindow`
 - **Severidad:** Media
@@ -30,6 +32,7 @@ Los tres riesgos técnicos principales ya fueron corregidos en esta misma revisi
 - **Impacto:** Fuga de memoria acumulativa y ownership inconsistente en objetos de vida ligada a la ventana.
 - **Recomendación:** Liberar explícitamente el puntero o asignar ownership con padre Qt.
 - **Estado:** Corregido. Se agregó su liberación en el destructor.
+- **Verificación:** En `mainwindow.cpp` el destructor ahora contiene `delete m_fpgaProtocolApplied;`.
 
 ### 4. Incoherencia entre versión de la app e instalador
 - **Severidad:** Baja
@@ -37,6 +40,7 @@ Los tres riesgos técnicos principales ya fueron corregidos en esta misma revisi
 - **Impacto:** Confusión en distribución, soporte y trazabilidad de artefactos.
 - **Recomendación:** Mantener una única fuente de verdad para la versión y propagarla al binario e instalador.
 - **Estado:** Corregido. El instalador quedó alineado con `2.3.0`.
+- **Verificación:** En `installer.iss` la macro `MyAppVersion` está definida como `"2.3.0"`.
 
 ## Riesgos Residuales
 - El repintado del gráfico sigue siendo el principal foco de rendimiento bajo alta frecuencia de datos.

@@ -1,6 +1,12 @@
-# Manual de Usuario - Serial Port Plotter NOV25
+# Manual de Usuario - Serial Port Plotter v2.3.0
 
-Este manual describe cómo usar la versión NOV25 de Serial Port Plotter desde la interfaz principal, siguiendo el flujo real de la aplicación: conectar el puerto, configurar la matriz y los tiempos, aplicar la configuración al FPGA, iniciar la adquisición y, si hace falta, pausar o desconectar.
+Este manual describe cómo usar la versión `v2.3.0` de Serial Port Plotter. A continuación se listan los cambios y comportamientos relevantes introducidos en esta versión:
+
+- Escritura serie no bloqueante: la aplicación usa `QSerialPort::write()` para evitar esperas activas en el hilo de UI.
+- Validación de datos: valores no numéricos recibidos se ignoran durante el ploteo y se registran como advertencias.
+- Limpieza de recursos: se corrigió la gestión de memoria de objetos de protocolo en la ventana principal.
+
+Los pasos operativos descritos más abajo aplican a la versión `v2.3.0`.
 
 ## 1. Inicio rápido
 
@@ -33,24 +39,15 @@ Los bloques principales de la interfaz son:
 
 Para comenzar a trabajar, primero hay que abrir el puerto.
 
-- Usá `Refresh` si necesitás volver a leer los puertos disponibles.
-- Elegí el puerto en `PORT`.
-- Definí la velocidad en `BAUD`.
-- Seleccioná el formato en `DATA`, `PARITY` y `STOP`.
-- Presioná `Connect`.
 
 Cuando el puerto queda abierto, la aplicación cambia al estado de preparación y deshabilita los controles serie mientras la conexión está activa.
+Nota técnica: la escritura hacia el dispositivo se realiza mediante llamadas a `QSerialPort::write()` sin esperas activas en el hilo de interfaz, de modo que la UI no queda bloqueada por operaciones de E/S. Los fallos en la escritura se reportan en la barra de estado y en el log de debug.
 
 ## 4. Configuración de datos y tiempos
 
 La configuración de envío se arma desde la matriz de datos y los parámetros temporales.
 
-- Los botones `A1_0` a `D8_31` activan o desactivan bits individuales de la matriz.
-- Los botones `GRAF_1` a `GRAF_8` seleccionan la columna de gráfico asociada al envío.
-- `TiempoBox` cambia la unidad de tiempo.
-- `TiempoNum` define el valor de tiempo.
-- `Ancho de Pulso` ajusta el ancho de pulso del protocolo.
-- `Delay: Channel A`, `Delay: Channel B`, `Delay: Channel C` y `Delay: Channel D` ajustan los retardos por canal.
+Nota de validación: durante el ploteo `PlotManager` convierte cadenas a doble usando una verificación de éxito; valores no numéricos se descartan y no llegan al gráfico (se registran como advertencias en debug). Esto preserva la integridad visual ante datos malformados.
 
 Cada cambio en estos controles marca la configuración como pendiente de aplicar. En ese caso, el botón `Enviar Datos` queda resaltado.
 
@@ -125,6 +122,8 @@ La acción `Record stream` activa o desactiva la grabación del flujo entrante e
 - Si la grabación no puede abrirse, la acción se desactiva automáticamente.
 - Al desconectar o cerrar la sesión, el archivo se cierra.
 
+Nota: el encabezado y metadatos del CSV incluyen la versión de la aplicación (`v2.3.0`). El índice usado para cada fila corresponde al contador de muestras del ploteo (`dataPointCount`), que se sincroniza con lo mostrado en pantalla.
+
 ## 11. Mensajes de estado
 
 La barra inferior muestra el estado operativo de la aplicación.
@@ -188,4 +187,10 @@ Los valores pueden ser enteros o decimales, según el formato que se esté envia
 - `Save PNG` exporta el gráfico.
 - `Record stream` habilita la grabación de datos.
 
-Este manual describe el flujo operativo disponible en la versión NOV25 de la aplicación.
+Este manual describe el flujo operativo disponible en la versión `v2.3.0` de la aplicación.
+
+## 17. Notas de rendimiento y riesgos conocidos
+
+- Repintado frecuente: bajo cargas altas de datos el repintado del gráfico puede afectar el rendimiento y la responsividad; para mitigar, reduzca la cantidad de puntos visibles o aumente el intervalo de repintado.
+- Telemetría de paquetes inválidos: los paquetes no numéricos se ignoran y se registran para diagnóstico; actualmente no hay bloqueo preventivo automático sobre la adquisición.
+- Empaquetado: verifique que el instalador incluya los recursos y dependencias (licencias) al generar instaladores en `build/installer`.

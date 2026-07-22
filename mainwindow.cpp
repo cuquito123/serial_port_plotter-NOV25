@@ -241,6 +241,7 @@ MainWindow::MainWindow (QWidget *parent) :
 
       indiceUnidadAnterior = ui->TiempoBox->currentIndex();
       actualizarMaximoDeTiempo(indiceUnidadAnterior);
+    updateUIForState();
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -917,38 +918,7 @@ void MainWindow::portOpenedSuccess()
     logEvent(EventType::PortOpened, "Conexión exitosa al puerto serie");
     resetHealthMetrics();
 
-    ui->A1_0->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->B1_1->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->C1_2->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->D1_3->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->A2_4->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->B2_5->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->C2_6->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->D2_7->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->A3_8->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->B3_9->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->C3_10->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->D3_11->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->A4_12->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->B4_13->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->C4_14->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->D4_15->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->A5_16->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->B5_17->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->C5_18->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->D5_19->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->A6_20->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->B6_21->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->C6_22->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->D6_23->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->A7_24->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->B7_25->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->C7_26->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->D7_27->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->A8_28->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->B8_29->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->C8_30->setStyleSheet("background-color: rgb(150, 50, 50);");
-    ui->D8_31->setStyleSheet("background-color: rgb(150, 50, 50);");
+    limpiarMatrizInterna();
     enable_com_controls(false);
     connected = true;
     plotting = false;  // NO iniciar plotting aqui. Esperar a EnviarDatos

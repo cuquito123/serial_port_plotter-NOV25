@@ -919,6 +919,9 @@ void MainWindow::portOpenedSuccess()
     resetHealthMetrics();
 
     limpiarMatrizInterna();
+    for (QPushButton* boton : botonesDatos) {
+        boton->setStyleSheet(inactiveMatrixButtonStyle());
+    }
     enable_com_controls(false);
     connected = true;
     plotting = false;  // NO iniciar plotting aqui. Esperar a EnviarDatos
@@ -1773,10 +1776,10 @@ void MainWindow::actualizarEstadoGraf(int indiceBotonPresionado)
 {
     // Marca visualmente la columna activa y la comunica al protocolo.
     for (QPushButton* boton : botonesGraf) {
-        boton->setStyleSheet("background-color: rgb(150, 50, 50);");
+        boton->setStyleSheet(inactiveMatrixButtonStyle());
     }
 
-    botonesGraf[indiceBotonPresionado]->setStyleSheet("background-color: rgb(15, 125, 15);");
+    botonesGraf[indiceBotonPresionado]->setStyleSheet(activeMatrixButtonStyle());
     columnaSeleccionada = indiceBotonPresionado;
     m_fpgaProtocol->selectColumn(indiceBotonPresionado);
     
@@ -1789,9 +1792,9 @@ void MainWindow::actualizarBotonDato(int bit, QPushButton* boton)
     // Alterna un bit de datos y refleja su estado con color en el boton.
     m_fpgaProtocol->toggleButton(bit);
     if (m_fpgaProtocol->buttonState(bit)) {
-        boton->setStyleSheet("background-color: rgb(15, 125, 15);"); // Verde
+        boton->setStyleSheet(activeMatrixButtonStyle());
     } else {
-        boton->setStyleSheet("background-color: rgb(150, 50, 50);"); // Rojo
+        boton->setStyleSheet(inactiveMatrixButtonStyle());
     }
     
     // Marcar cambios pendientes
@@ -1813,14 +1816,30 @@ void MainWindow::limpiarMatrizInterna()
     }
 
     for (QPushButton* boton : botonesDatos) {
-        boton->setStyleSheet("background-color: rgb(150, 50, 50);");
+        boton->setStyleSheet(inactiveMatrixButtonStyle());
     }
 
     for (QPushButton* boton : botonesGraf) {
-        boton->setStyleSheet("background-color: rgb(150, 50, 50);");
+        boton->setStyleSheet(inactiveMatrixButtonStyle());
     }
 
     columnaSeleccionada = 0;
+}
+
+QString MainWindow::activeMatrixButtonStyle() const
+{
+    return QStringLiteral(
+        "QPushButton { background-color: rgb(15, 125, 15); }"
+        "QPushButton:disabled { background-color: rgb(70, 90, 70); color: rgb(150, 150, 150); }"
+    );
+}
+
+QString MainWindow::inactiveMatrixButtonStyle() const
+{
+    return QStringLiteral(
+        "QPushButton { background-color: rgb(150, 50, 50); }"
+        "QPushButton:disabled { background-color: rgb(90, 70, 70); color: rgb(150, 150, 150); }"
+    );
 }
 
 // ─── limpiarPlot ──────────────────────────────────────────────────────────────
@@ -1898,7 +1917,7 @@ void MainWindow::updateUIForState()
 
     // Botones de acción principal
     ui->actionConnect->setEnabled(isDisconnected);
-    ui->actionDisconnect->setEnabled(!isDisconnected && !isFault);
+    ui->actionDisconnect->setEnabled(!isDisconnected);
     ui->actionPause_Plot->setEnabled(isAcquiring || isPaused);
 
     // Controles de configuración
@@ -2026,6 +2045,7 @@ MainWindow::PreflightResult MainWindow::performPreflightCheck()
     // 1. Verificar puerto abierto
     if (!connected) {
         result.errorMessage = "Puerto serie no conectado. Abrí puerto primero.";
+        result.success = false;
         return result;
     }
 
@@ -2033,6 +2053,7 @@ MainWindow::PreflightResult MainWindow::performPreflightCheck()
     QStringList labels = m_fpgaProtocol->generateLabels();
     if (labels.isEmpty()) {
         result.errorMessage = "Sin canales activos. Configurá matriz de botones.";
+        result.success = false;
         return result;
     }
 
@@ -2040,6 +2061,7 @@ MainWindow::PreflightResult MainWindow::performPreflightCheck()
     int timeValue = ui->TiempoNum->value();
     if (timeValue <= 0) {
         result.errorMessage = "Valor de tiempo inválido. Asegurate de que sea > 0.";
+        result.success = false;
         return result;
     }
 
@@ -2048,10 +2070,12 @@ MainWindow::PreflightResult MainWindow::performPreflightCheck()
     quint32 baseTime = m_fpgaProtocol->convertToBase(timeValue, timeUnitIndex);
     if (baseTime < 56) {  // 5.6 ms en unidad base
         result.errorMessage = "Tiempo mínimo permitido: 5.6 ms.";
+        result.success = false;
         return result;
     }
     if (baseTime > 99999999) {
         result.errorMessage = "Tiempo máximo permitido: 99,999,999 (unidad base).";
+        result.success = false;
         return result;
     }
 

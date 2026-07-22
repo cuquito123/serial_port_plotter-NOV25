@@ -253,6 +253,8 @@ private:
     // Funciones auxiliares de logica de UI/protocolo.
     void actualizarEstadoGraf(int indiceBotonPresionado);
     void actualizarBotonDato(int bit, QPushButton* boton);
+    QString activeMatrixButtonStyle() const;
+    QString inactiveMatrixButtonStyle() const;
     void limpiarPlot();
     QStringList generarLabels();
 

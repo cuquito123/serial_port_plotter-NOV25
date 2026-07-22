@@ -2,6 +2,7 @@
 #include <QListWidget>
 #include <QInputDialog>
 #include <QDebug>
+#include <QElapsedTimer>
 
 PlotManager::PlotManager(QCustomPlot *plot, QListWidget *channelList, QObject *parent)
     : QObject(parent), m_plot(plot), m_channelList(channelList)
@@ -86,8 +87,26 @@ void PlotManager::setupPlot()
 void PlotManager::replot()
 {
     if (!m_plot) return;
+
+    QElapsedTimer timer;
+    timer.start();
     m_plot->xAxis->setRange(m_dataPointNumber - m_visiblePoints, m_dataPointNumber);
     m_plot->replot();
+
+    const double elapsedMs = static_cast<double>(timer.nsecsElapsed()) / 1000000.0;
+    m_replotSamples++;
+    m_replotAccumulatedMs += elapsedMs;
+    if (elapsedMs > m_replotMaxMs) {
+        m_replotMaxMs = elapsedMs;
+    }
+
+    if (m_replotSamples >= m_replotReportEvery) {
+        const double averageMs = m_replotAccumulatedMs / static_cast<double>(m_replotSamples);
+        emit replotProfileWindow(averageMs, m_replotMaxMs, static_cast<int>(m_replotSamples));
+        m_replotSamples = 0;
+        m_replotAccumulatedMs = 0.0;
+        m_replotMaxMs = 0.0;
+    }
 }
 
 // Define el mapeo fijo trama->grafico usado durante la adquisicion activa.

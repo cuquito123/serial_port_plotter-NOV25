@@ -34,10 +34,60 @@
 #include "profilemanager.hpp"
 #include <x86intrin.h>
 #include <QWidget>
+#include <QLabel>
 #include <QDebug>
 
 #include "console.h"
 #include "QMessageBox"
+
+namespace {
+constexpr double kInvalidPacketWarningRatio = 0.10;
+constexpr double kInvalidPacketFaultRatio = 0.25;
+constexpr qint64 kInvalidPacketSustainMs = 5000;
+constexpr double kReplotBudgetUsageThreshold = 0.50;
+
+struct CommunicationDegradationState {
+    qint64 warningSinceMs = 0;
+    qint64 faultSinceMs = 0;
+    bool warningLogged = false;
+    bool faultLogged = false;
+};
+
+CommunicationDegradationState g_commDegradationState;
+QLabel *g_commHealthLabel = nullptr;
+
+bool isInvalidParsedPacket(const QStringList &data, const QString &rawMessage)
+{
+    if (rawMessage.trimmed().isEmpty() || data.isEmpty()) {
+        return true;
+    }
+
+    for (const QString &field : data) {
+        if (field.trimmed().isEmpty()) {
+            return true;
+        }
+
+        bool ok = false;
+        field.toDouble(&ok);
+        if (!ok) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void setCommunicationHealthLabel(const QString &text, const QString &styleSheet, bool visible)
+{
+    if (!g_commHealthLabel) {
+        return;
+    }
+
+    g_commHealthLabel->setText(text);
+    g_commHealthLabel->setStyleSheet(styleSheet);
+    g_commHealthLabel->setVisible(visible);
+}
+}
 #include <QJsonObject>
 #include <QJsonDocument>
 #include <QDir>
@@ -138,6 +188,11 @@ MainWindow::MainWindow (QWidget *parent) :
       if (filterDisplayedData) {
           ui->textEdit_UartWindow->append(rawMessage);
       }
+
+      if (isInvalidParsedPacket(data, rawMessage)) {
+          m_healthMetrics.invalidPacketCount++;
+      }
+
       emit newData(data);
   });
   connect(this, SIGNAL(newData(QStringList)), this, SLOT(onNewDataArrived(QStringList)));
@@ -175,6 +230,7 @@ MainWindow::MainWindow (QWidget *parent) :
   connect(m_plotManager, &PlotManager::statusChanged, this, [this](const QString &msg) {
       ui->statusBar->showMessage(msg);
   });
+    connect(m_plotManager, &PlotManager::replotProfileWindow, this, &MainWindow::onReplotProfileWindow);
 
   m_csvManager = new CsvManager(m_fpgaProtocol, this);
   connect(m_csvManager, &CsvManager::statusChanged, this, [this](const QString &msg) {
@@ -194,6 +250,10 @@ MainWindow::MainWindow (QWidget *parent) :
       statusLabel->setText("Listo");
       statusLabel->setMinimumWidth(100);
       ui->statusBar->addPermanentWidget(statusLabel);
+            g_commHealthLabel = new QLabel(this);
+            g_commHealthLabel->setMinimumWidth(260);
+            g_commHealthLabel->setVisible(false);
+            ui->statusBar->addPermanentWidget(g_commHealthLabel);
     // Experiment time label
     experimentTimeLabel = new QLabel(this);
     experimentTimeLabel->setText("Exp: 00:00:00");
@@ -936,6 +996,37 @@ void MainWindow::replot()
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
+void MainWindow::onReplotProfileWindow(double averageMs, double maxMs, int samples)
+{
+    if (samples <= 0) {
+        return;
+    }
+
+    const double budgetMs = static_cast<double>(m_plotUpdateIntervalMs) * kReplotBudgetUsageThreshold;
+    const double avgUsage = (averageMs / static_cast<double>(m_plotUpdateIntervalMs)) * 100.0;
+
+    qInfo().nospace()
+        << "[PERF][replot] samples=" << samples
+        << " avg_ms=" << QString::number(averageMs, 'f', 3)
+        << " max_ms=" << QString::number(maxMs, 'f', 3)
+        << " interval_ms=" << m_plotUpdateIntervalMs
+        << " usage_pct=" << QString::number(avgUsage, 'f', 1);
+
+    if (!m_replotThrottleApplied && averageMs > budgetMs) {
+        m_replotThrottleApplied = true;
+        m_plotUpdateIntervalMs = kPlotUpdateFallbackIntervalMs;
+        updateTimer.setInterval(m_plotUpdateIntervalMs);
+
+        const QString perfMsg = QString("Mitigación DEU-04: replot promedio %1 ms (> %2 ms). Refresco ajustado a %3 ms.")
+                                    .arg(QString::number(averageMs, 'f', 2))
+                                    .arg(QString::number(budgetMs, 'f', 2))
+                                    .arg(m_plotUpdateIntervalMs);
+        logEvent(EventType::ConfigApplied, perfMsg);
+        ui->statusBar->showMessage(perfMsg, 6000);
+    }
+}
+/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
 /**
  * @brief Procesa nueva data del puerto serie en formato de lista de cadenas.
  * @param newData
@@ -1326,7 +1417,7 @@ void MainWindow::on_actionPause_Plot_triggered()
     if (m_appState == AppState::Paused || !plotting) {
                 // Resume acquisition
                 logEvent(EventType::Started, "Reanudando adquisición de datos");
-        updateTimer.start(20);
+        updateTimer.start(m_plotUpdateIntervalMs);
                 plotting = true;
         ui->statusBar->showMessage("Plot reanudado. La adquisición y la grabación continúan.");
                 cambiarEstado("ADQUISICIÓN (En curso)", "green");
@@ -1628,7 +1719,7 @@ void MainWindow::on_EnviarDatos_clicked()
     // AHORA: Automáticamente inicia adquisición
     // ====================================================================
     logEvent(EventType::Started, "Iniciando adquisición de datos");
-    updateTimer.start(20);
+    updateTimer.start(m_plotUpdateIntervalMs);
     plotting = true;
     ui->statusBar->showMessage("Adquisición iniciada. Presioná 'Pausa/Reanuda' para pausar.");
 
@@ -2097,6 +2188,64 @@ void MainWindow::updateHealthMetrics(const QStringList &newData)
         m_healthMetrics.frameLatencyMs = static_cast<float>(now - lastTime);
     }
     lastTime = now;
+
+    const quint64 totalPackets = m_healthMetrics.validPacketCount
+                               + m_healthMetrics.invalidPacketCount
+                               + m_healthMetrics.lostPacketCount;
+    if (totalPackets == 0) {
+        return;
+    }
+
+    const double invalidRatio = static_cast<double>(m_healthMetrics.invalidPacketCount)
+                                / static_cast<double>(totalPackets);
+    const bool warningActive = invalidRatio >= kInvalidPacketWarningRatio;
+    const bool faultActive = invalidRatio >= kInvalidPacketFaultRatio;
+
+    if (!warningActive) {
+        g_commDegradationState = {};
+        setCommunicationHealthLabel(QString(), QString(), false);
+        return;
+    }
+
+    if (g_commDegradationState.warningSinceMs == 0) {
+        g_commDegradationState.warningSinceMs = now;
+    }
+
+    if (faultActive && g_commDegradationState.faultSinceMs == 0) {
+        g_commDegradationState.faultSinceMs = now;
+    }
+
+    const qint64 warningElapsedMs = now - g_commDegradationState.warningSinceMs;
+    const qint64 faultElapsedMs = faultActive ? (now - g_commDegradationState.faultSinceMs) : 0;
+
+    if (faultActive && faultElapsedMs >= kInvalidPacketSustainMs) {
+        const QString faultMessage = QStringLiteral("Comunicación en falla: %1%% de tramas inválidas")
+                                         .arg(QString::number(invalidRatio * 100.0, 'f', 1));
+        setCommunicationHealthLabel(faultMessage, QStringLiteral("color: red; font-weight: bold;"), true);
+        ui->statusBar->showMessage(faultMessage);
+
+        if (!g_commDegradationState.faultLogged) {
+            logEvent(EventType::Error, faultMessage);
+            g_commDegradationState.faultLogged = true;
+        }
+
+        if (m_appState != AppState::Fault) {
+            setAppState(AppState::Fault);
+        }
+        return;
+    }
+
+    if (warningElapsedMs >= kInvalidPacketSustainMs) {
+        const QString warningMessage = QStringLiteral("Advertencia: %1%% de tramas inválidas")
+                                           .arg(QString::number(invalidRatio * 100.0, 'f', 1));
+        setCommunicationHealthLabel(warningMessage, QStringLiteral("color: darkorange; font-weight: bold;"), true);
+        ui->statusBar->showMessage(warningMessage);
+
+        if (!g_commDegradationState.warningLogged) {
+            logEvent(EventType::Error, warningMessage);
+            g_commDegradationState.warningLogged = true;
+        }
+    }
 }
 
 void MainWindow::resetHealthMetrics()
@@ -2107,6 +2256,8 @@ void MainWindow::resetHealthMetrics()
     m_healthMetrics.lastPacketTimestampMs = 0;
     m_healthMetrics.frameLatencyMs = 0.0f;
     m_healthMetrics.firstPacketTime = 0;
+    g_commDegradationState = {};
+    setCommunicationHealthLabel(QString(), QString(), false);
 }
 
 QString MainWindow::getHealthMetricsString() const

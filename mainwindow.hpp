@@ -165,6 +165,7 @@ private slots:
     QString getStateDisplayName(AppState state) const;
     void updateUIForState();
     bool canTransitionToState(AppState newState) const;
+    void onReplotProfileWindow(double averageMs, double maxMs, int samples);
 
 signals:
     void portOpenFail();                                                                  // Emitida cuando no se puede abrir el puerto
@@ -216,6 +217,10 @@ private:
    // QAction *guardarCSVAction;  // Declaración del botón en la barra de menú
 
     QTimer updateTimer;                                                                   // Temporizador de refresco del grafico
+    static constexpr int kPlotUpdateIntervalMs = 20;                                      // Intervalo nominal (50 FPS)
+    static constexpr int kPlotUpdateFallbackIntervalMs = 33;                              // Mitigación (30 FPS)
+    int m_plotUpdateIntervalMs = kPlotUpdateIntervalMs;
+    bool m_replotThrottleApplied = false;
     QTime timeOfFirstData;                                                                // Marca temporal del primer dato recibido
     // Experimento: tiempo transcurrido con pausa/reanudar
     QElapsedTimer m_experimentTimer;                                                       // Temporizador de alta resolución

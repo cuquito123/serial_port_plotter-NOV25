@@ -1615,6 +1615,9 @@ void MainWindow::on_EnviarDatos_clicked()
     // Limpiar indicador de cambios pendientes
     clearPendingChanges();
 
+    // Estado intermedio: la configuración ya quedó aplicada al FPGA y el ciclo todavía no empezó a recibir datos.
+    setAppState(AppState::ReadyForExecution);
+
     // ====================================================================
     // AHORA: Automáticamente inicia adquisición
     // ====================================================================

@@ -712,6 +712,10 @@ void MainWindow::buildMenus()
     auto *actionAbout = new QAction("Acerca de...", this);
     connect(actionAbout, &QAction::triggered, this, &MainWindow::on_actionAcerca_de_triggered);
 
+    auto *actionConfigPanel = new QAction("Panel de configuración", this);
+    actionConfigPanel->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Tab));
+    connect(actionConfigPanel, &QAction::triggered, this, &MainWindow::on_actionconfig_triggered);
+
     connect(ui->actionPropiedades_de_Puerto, &QAction::triggered, this, &MainWindow::on_actionPropiedades_de_Puerto_triggered);
     connect(ui->actionMostar_todos_los_datos, &QAction::toggled, this, &MainWindow::on_actionMostar_todos_los_datos_toggled);
 
@@ -738,6 +742,8 @@ void MainWindow::buildMenus()
     QMenu *menuVisualizacion = ui->menuBar->addMenu("Visualización");
     menuVisualizacion->addAction(ui->actionEsconder_Caja_de_Texto);
     menuVisualizacion->addAction(ui->actionMostar_todos_los_datos);
+    menuVisualizacion->addSeparator();
+    menuVisualizacion->addAction(actionConfigPanel);
     menuVisualizacion->addSeparator();
     menuVisualizacion->addAction(ui->actionPause_Plot);
     QMenu *menuControlesGrafico = menuVisualizacion->addMenu("Controles del Gráfico");

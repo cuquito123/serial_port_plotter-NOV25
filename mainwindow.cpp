@@ -1096,6 +1096,7 @@ void MainWindow::on_actionPropiedades_de_Puerto_triggered()
 {
     QDialog dialog(this);
     dialog.setWindowTitle("Propiedades de Puerto");
+    dialog.setMinimumWidth(420);
 
     QFormLayout *formLayout = new QFormLayout(&dialog);
 
@@ -1136,6 +1137,8 @@ void MainWindow::on_actionPropiedades_de_Puerto_triggered()
     formLayout->addRow("Bits de parada", stopBitsCombo);
 
     QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, Qt::Horizontal, &dialog);
+    buttonBox->button(QDialogButtonBox::Ok)->setText("Aceptar");
+    buttonBox->button(QDialogButtonBox::Cancel)->setText("Cancelar");
     formLayout->addRow(buttonBox);
 
     connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
@@ -1191,6 +1194,7 @@ void MainWindow::on_actionPropiedades_de_grabacion_triggered()
 {
     QDialog dialog(this);
     dialog.setWindowTitle("Propiedades de grabación");
+    dialog.setMinimumWidth(420);
 
     QVBoxLayout *layout = new QVBoxLayout(&dialog);
     QLabel *summary = new QLabel(&dialog);
@@ -1202,6 +1206,7 @@ void MainWindow::on_actionPropiedades_de_grabacion_triggered()
     layout->addWidget(summary);
 
     QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, Qt::Horizontal, &dialog);
+    buttonBox->button(QDialogButtonBox::Close)->setText("Cerrar");
     QAbstractButton *openDocsButton = buttonBox->addButton("Abrir carpeta de documentos", QDialogButtonBox::ActionRole);
     layout->addWidget(buttonBox);
 

@@ -617,9 +617,7 @@ void MainWindow::createUI()
     /* Si no hay puertos disponibles, deshabilita controles y retorna */
     if (QSerialPortInfo::availablePorts().size() == 0)
       {
-        enable_com_controls (false);
         ui->statusBar->showMessage ("No ports detected.");
-        ui->savePNGButton->setEnabled (false);
         return;
       }
 
@@ -830,26 +828,6 @@ void MainWindow::setupPlot()
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /**
- * @brief Habilita o deshabilita controles de comunicacion COM.
- * @param enable true para habilitar, false para deshabilitar
- */
-void MainWindow::enable_com_controls (bool enable)
-{
-    /* Propiedades del puerto COM */
-  ui->comboBaud->setEnabled (enable);
-  ui->comboData->setEnabled (enable);
-  ui->comboParity->setEnabled (enable);
-  ui->comboPort->setEnabled (enable);
-  ui->comboStop->setEnabled (enable);
-
-    /* Acciones de barra de herramientas */
-  ui->actionConnect->setEnabled (enable);
-  ui->actionPause_Plot->setEnabled (!enable);
-  ui->actionDisconnect->setEnabled (!enable);
-}
-/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
-
-/**
  * @brief Abre el puerto serie interno con la configuracion indicada.
  * @param portInfo
  * @param baudRate
@@ -922,7 +900,6 @@ void MainWindow::portOpenedSuccess()
     for (QPushButton* boton : botonesDatos) {
         boton->setStyleSheet(inactiveMatrixButtonStyle());
     }
-    enable_com_controls(false);
     connected = true;
     plotting = false;  // NO iniciar plotting aqui. Esperar a EnviarDatos
 
@@ -1444,11 +1421,6 @@ void MainWindow::on_actionDisconnect_triggered()
       connected = false;
       plotting = false;
 
-      ui->actionConnect->setEnabled(true);
-      ui->actionPause_Plot->setEnabled(false);
-      ui->actionDisconnect->setEnabled(false);
-      ui->savePNGButton->setEnabled(false);
-      enable_com_controls(true);
     setRecordingControlsState(false);
 
       receivedData.clear();
@@ -1649,8 +1621,6 @@ void MainWindow::on_EnviarDatos_clicked()
     logEvent(EventType::Started, "Iniciando adquisición de datos");
     updateTimer.start(20);
     plotting = true;
-    ui->actionConnect->setEnabled(false);
-    ui->actionPause_Plot->setEnabled(true);
     ui->statusBar->showMessage("Adquisición iniciada. Presioná 'Pausa/Reanuda' para pausar.");
 
     // Transición de máquina de estados
@@ -1924,6 +1894,7 @@ void MainWindow::updateUIForState()
     ui->actionConnect->setEnabled(isDisconnected);
     ui->actionDisconnect->setEnabled(!isDisconnected);
     ui->actionPause_Plot->setEnabled(isAcquiring || isPaused);
+    ui->savePNGButton->setEnabled(!isDisconnected);
 
     // Controles de configuración
     ui->GRAF_1->setEnabled(canConfigure);

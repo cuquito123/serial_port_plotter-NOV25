@@ -233,7 +233,6 @@ private:
     QString receivedData;                                                                 // Buffer de texto para UART
     HelpWindow *helpWindow;
     void createUI();                                                                      // Inicializa y rellena controles de UI
-    void enable_com_controls (bool enable);                                               // Habilita/deshabilita controles de COM
     void setupPlot();                                                                     // Inicializa el area de grafico
     void buildMenus();                                                                    // Reconstruye la barra de menues con la estructura actual
     bool exportPlotData(const QString &filePath) const;                                    // Exporta el contenido actual del plot a CSV

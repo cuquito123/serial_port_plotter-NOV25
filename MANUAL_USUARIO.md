@@ -1,196 +1,316 @@
-# Manual de Usuario - Serial Port Plotter v2.3.0
+# Manual de Usuario — Serial Port Plotter v2.3.0
 
-Este manual describe cómo usar la versión `v2.3.0` de Serial Port Plotter. A continuación se listan los cambios y comportamientos relevantes introducidos en esta versión:
+Software de instrumentación para el detector de fotones en coincidencias múltiples basado en FPGA.
+Centro de Investigaciones Ópticas (CIOp) — CONICET · CIC-PBA · UNLP.
 
-- Escritura serie no bloqueante: la aplicación usa `QSerialPort::write()` para evitar esperas activas en el hilo de UI.
-- Validación de datos: valores no numéricos recibidos se ignoran durante el ploteo y se registran como advertencias.
-- Limpieza de recursos: se corrigió la gestión de memoria de objetos de protocolo en la ventana principal.
+> Este archivo es la versión de consulta rápida que acompaña al ejecutable y se abre desde
+> **Ayuda → Manual de Usuario**. La versión completa, con figuras, es el documento
+> *Manual de Usuario — Serial Port Plotter v2.3.0* (formato Word).
 
-Los pasos operativos descritos más abajo aplican a la versión `v2.3.0`.
+---
 
-## 1. Inicio rápido
+## 1. Qué es esta aplicación
 
-1. Abrí la aplicación.
-2. Elegí el puerto serie en `PORT`.
-3. Configurá `BAUD`, `DATA`, `PARITY` y `STOP`.
-4. Presioná `Connect`.
-5. Elegí la matriz de datos y la columna de gráfico que querés usar.
-6. Ajustá `TiempoBox`, `TiempoNum`, `Ancho de Pulso` y los `Delay`.
-7. Presioná `Enviar Datos` para aplicar la configuración.
-8. Presioná `Connect` nuevamente para iniciar la adquisición.
+Serial Port Plotter comanda y monitorea un detector de fotones en coincidencias múltiples
+implementado sobre una placa FPGA DE0 Nano SoC (Altera/Intel) programada en VHDL, que se
+comunica con la PC por puerto serie mediante protocolo UART/RS232.
 
-## 2. Estructura de la interfaz
+El dispositivo opera con 12 canales: cuatro para el conteo individual de pulsos de entrada y
+el resto para el conteo de coincidencias, de hasta cuatro canales en simultáneo.
 
-La ventana principal separa dos vistas dentro de `stackedWidget`:
+Desde la aplicación se puede:
 
-- La vista de configuración, donde se seleccionan puertos, canales y parámetros.
-- La vista de gráfico, donde se visualiza la señal y se controlan los canales visibles.
+- Configurar qué canales se habilitan y entre cuáles se determinan coincidencias.
+- Ajustar el ancho de pulso y los retardos independientes de los canales A, B, C y D.
+- Definir la ventana de integración y la duración total del experimento.
+- Visualizar en tiempo real los conteos individuales y en coincidencia.
+- Registrar la adquisición en CSV para su procesamiento posterior.
+- Guardar y recuperar configuraciones completas mediante perfiles.
 
-Los bloques principales de la interfaz son:
+---
 
-- `PORT CONTROLS`: selección y actualización del puerto serie.
-- `PLOT CONTROLS`: controles de visualización del gráfico.
-- Matriz de selección de datos: botones `A1_0` a `D8_31`.
-- Selección de columnas del gráfico: botones `GRAF_1` a `GRAF_8`.
-- Panel de canales: `listWidget_Channels`.
-- Área de texto UART: `textEdit_UartWindow`.
+## 2. Anatomía de la pantalla
+
+| Zona | Contenido |
+|---|---|
+| Barra de menús | Puerto Serial · Visualización · Grabación & Exportación · Ayuda |
+| Barra de herramientas | Conectar, Pausa/Reanuda y Desconectar, en modo solo iconos |
+| Área de gráfico | Curvas en tiempo real, leyenda de canales y botón lateral `AutoScale Y` |
+| Panel de configuración | Tiempo, duración, ventana de texto UART, `Enviar Datos`, `Reset`, ancho de pulso, retardos A–D, matriz de canales y selectores de columna |
+| Barra de estado | Mensaje de estado, coordenadas del cursor, tiempo transcurrido y restante |
+
+La acción **Visualización → Panel de configuración** (`Ctrl+Tab`) alterna hacia una segunda
+vista con controles complementarios: selectores de puerto (con botón `Refresh` para releer
+los puertos disponibles), controles finos del gráfico (cantidad de puntos, paso y límites del
+eje vertical), `Save PNG` (disponible con el puerto abierto), `Reset All Visible` y la lista
+de canales visibles. Incluye además dos botones rotulados en inglés — `Show All Incoming
+Data` y `Hide TextBox` — que duplican las acciones del menú Visualización, y el botón
+`Ir a gráfico` para volver a la vista principal. Para el flujo habitual esta segunda vista
+no es necesaria.
+
+---
 
 ## 3. Conexión al puerto serie
 
-Para comenzar a trabajar, primero hay que abrir el puerto.
+### 3.1. Configurar el puerto
 
+**Puerto Serial → Propiedades de Puerto…**
 
-Cuando el puerto queda abierto, la aplicación cambia al estado de preparación y deshabilita los controles serie mientras la conexión está activa.
-Nota técnica: la escritura hacia el dispositivo se realiza mediante llamadas a `QSerialPort::write()` sin esperas activas en el hilo de interfaz, de modo que la UI no queda bloqueada por operaciones de E/S. Los fallos en la escritura se reportan en la barra de estado y en el log de debug.
+| Parámetro | Valor habitual |
+|---|---|
+| Puerto | COM4 |
+| Baudios | 115200 |
+| Bits de datos | 8 bits |
+| Paridad | none |
+| Bits de parada | 1 bit |
 
-## 4. Configuración de datos y tiempos
+Si la aplicación ya estaba conectada, los cambios se aplican en la próxima reconexión.
 
-La configuración de envío se arma desde la matriz de datos y los parámetros temporales.
+### 3.2. Abrir el puerto
 
-Nota de validación: durante el ploteo `PlotManager` convierte cadenas a doble usando una verificación de éxito; valores no numéricos se descartan y no llegan al gráfico (se registran como advertencias en debug). Esto preserva la integridad visual ante datos malformados.
+Mediante **Puerto Serial → Conectar**, el primer botón de la barra de herramientas, o la
+tecla multimedia *Reproducir*.
 
-Cada cambio en estos controles marca la configuración como pendiente de aplicar. En ese caso, el botón `Enviar Datos` queda resaltado.
+Al conectar, la matriz de canales y la selección de columna se reinician por completo. La
+configuración del experimento se realiza siempre después de abrir el puerto; antes de
+conectar, esos controles permanecen deshabilitados.
+
+---
+
+## 4. Configuración del experimento
+
+### 4.1. Matriz de canales
+
+Cuatro filas (A, B, C, D) por ocho columnas: 32 posiciones, cada una asociada a un bit de
+configuración que se transmite al FPGA.
+
+| Color | Significado |
+|---|---|
+| Verde | Canal habilitado |
+| Rojo | Canal deshabilitado |
+| Atenuado | El control no está disponible en el estado operativo actual |
+
+### 4.2. Selectores de columna
+
+La fila de botones numerados del 1 al 8 determina qué columna de la trama se representa en
+el gráfico. Es una selección excluyente.
+
+### 4.3. Parámetros temporales
+
+| Control | Función |
+|---|---|
+| Unidad y valor de tiempo | Ventana de integración. Al cambiar la unidad, el valor se convierte automáticamente. El valor transmitido se ajusta hacia abajo al múltiplo de 8 de la unidad base que requiere el hardware (por ejemplo, 6 ms se transmite como 5,6 ms) |
+| Ancho de Pulso | Ancho de los pulsos, en unidades del hardware. Rango: 0 a 255 |
+| Delay: Channel A–D | Retardo independiente por canal de entrada, en unidades del hardware. Rango: 0 a 255 |
+| Duración (exp) | Duración total del experimento; si es mayor que cero, exige grabación en CSV |
+
+El hardware admite ventanas de integración entre 5,6 ms y 99.999.999 unidades base.
+
+### 4.4. Botón Reset
+
+El botón `Reset` reinicia el barrido en el FPGA y limpia la matriz y la configuración local.
+Después de usarlo hay que reconfigurar y presionar `Enviar Datos` para iniciar un nuevo
+ciclo.
+
+---
 
 ## 5. Aplicar la configuración
 
-Presioná `Enviar Datos` cuando terminaste de configurar la matriz y los tiempos.
+Todo cambio pendiente se señala de dos formas: el botón `Enviar Datos` se resalta en naranja
+y la barra de estado avisa que hay cambios sin aplicar.
 
-Al hacerlo, la aplicación:
+Al presionar `Enviar Datos`, la aplicación:
 
-- valida que el puerto esté conectado,
-- verifica que haya canales activos,
-- revisa que el tiempo sea válido,
-- confirma que la grabación CSV esté lista si está activada,
-- genera las etiquetas activas del protocolo,
-- prepara la trama extendida,
-- y envía la configuración al FPGA.
+1. Abre el archivo CSV si se definió una duración de experimento.
+2. Ejecuta el control previo.
+3. Limpia el gráfico y genera las etiquetas de los canales activos.
+4. Arma la trama extendida y la transmite al FPGA.
+5. Pasa a *Adquiriendo* e inicia el cronómetro.
 
-Después de aplicar la configuración, el sistema queda listo para ejecutar. En ese punto, el siguiente paso es presionar `Connect` para iniciar la adquisición.
+**Control previo.** Verifica que el puerto esté conectado, que haya al menos un canal activo,
+que el tiempo sea mayor que cero, que la ventana esté dentro del rango admitido y que el CSV
+esté abierto si la grabación está habilitada. Si alguna condición falla, la aplicación pasa a
+*Falla*, informa el motivo y no transmite nada. Para recuperarse: desconectar, corregir y
+repetir.
 
-## 6. Iniciar, pausar y desconectar
+---
 
-El flujo operativo usa tres acciones principales:
+## 6. Adquisición
 
-- `Connect`: inicia la adquisición cuando la configuración ya fue aplicada.
-- `Pause`: detiene la adquisición sin cerrar el puerto serie.
-- `Disconnect`: cierra el puerto y devuelve la aplicación al estado desconectado.
+| Acción | Efecto | Atajo |
+|---|---|---|
+| Conectar | Abre el puerto y habilita la configuración | Reproducir |
+| Pausa/Reanuda | Detiene o retoma la adquisición sin cerrar el puerto | Pausa |
+| Desconectar | Cierra el puerto, detiene el cronómetro y cierra el CSV | Detener |
 
-Si la sesión está pausada, `Connect` funciona como reanudación de la adquisición. Si se detecta un error de validación, la aplicación puede pasar al estado de falla y pedir desconexión para recuperar el flujo.
+Durante la pausa el puerto permanece abierto y los controles de configuración se habilitan,
+de modo que es posible reconfigurar y aplicar sin cerrar la conexión. El cronómetro se
+detiene al pausar y retoma la cuenta al reanudar, con o sin grabación activa.
 
-## 7. Visualización del gráfico
+Si se configuró una duración, al alcanzarla la aplicación finaliza el experimento
+automáticamente, cierra el CSV y lo informa. Para iniciar otro ciclo hay que reconfigurar y
+presionar `Enviar Datos`; `Pausa/Reanuda` no reanuda un experimento finalizado.
 
-La vista de gráfico permite controlar cómo se ve la señal en pantalla.
+---
 
-- `AutoScale Yaxis` ajusta el eje Y al contenido visible.
-- `Reset All Visible` vuelve a mostrar todos los canales ocultos.
-- `Save PNG` guarda una imagen del gráfico.
-- `POINTS` define cuántos puntos se muestran.
-- `Y STEP` define el paso de marcas del eje Y.
-- `MIN` y `MAX` ajustan los límites verticales.
+## 7. Estados de la aplicación
 
-También podés interactuar con el gráfico usando el mouse:
+| Estado | Cuándo ocurre |
+|---|---|
+| Desconectado | Al iniciar y después de cerrar el puerto |
+| Listo para configurar | Inmediatamente después de abrir el puerto |
+| Listo para ejecutar | Instante entre transmitir la configuración e iniciar la adquisición (transitorio) |
+| Adquiriendo | Mientras se reciben datos |
+| Pausado | Al presionar Pausa, o al finalizar el experimento por duración |
+| Falla | Control previo fallido, o degradación severa de la comunicación |
 
-- La rueda del mouse cambia el zoom.
-- El arrastre permite desplazarte cuando la adquisición está pausada.
-- Al mover el cursor sobre el gráfico, se muestran coordenadas y valores en la barra de estado.
+### Controles disponibles en cada estado
 
-## 8. Canales visibles
+| Control | Desconect. | Listo p/ config. | Adquiriendo | Pausado |
+|---|:--:|:--:|:--:|:--:|
+| Selectores de puerto | Sí | No | No | No |
+| Conectar | Sí | No | No | No |
+| Desconectar | No | Sí | Sí | Sí |
+| Pausa/Reanuda | No | No | Sí | Sí |
+| Matriz, columnas, tiempos, retardos | No | Sí | No | Sí |
+| Enviar Datos | No | Sí | No | Sí |
+| Reset | No | Sí | No | Sí |
+| Grabar Stream (CSV) | No | No | Sí | Sí |
 
-La lista `listWidget_Channels` permite controlar qué canales se ven en el gráfico.
+Los controles deshabilitados se muestran atenuados, de modo que su aspecto siempre coincide
+con su disponibilidad real.
 
-- Doble clic sobre un canal lo oculta o lo vuelve a mostrar.
-- El botón `Show All Incoming Data` vuelve a habilitar la visualización de todo el flujo recibido.
-- El botón `Reset All Visible` restablece la visibilidad completa.
+---
 
-La visibilidad de cada canal se sincroniza con el gráfico y con el panel de canales para que el estado sea consistente.
+## 8. Visualización
 
-## 9. Texto UART
+| Control | Ubicación | Función |
+|---|---|---|
+| `AutoScale Y` | Botón lateral del gráfico | Ajusta el eje vertical al contenido visible |
+| AutoScale en Y | Visualización → Controles del Gráfico | Misma función, desde el menú |
+| Limpiar Gráfico | Visualización → Controles del Gráfico | Borra las curvas |
+| Rueda del mouse | Sobre el gráfico | Zoom horizontal (eje de tiempo) |
+| Arrastre | Sobre el gráfico | Desplazamiento horizontal; el eje vertical se ajusta con `AutoScale Y` o desde el panel de configuración |
+| Movimiento del cursor | Sobre el gráfico | Muestra coordenadas en la barra de estado |
 
-La ventana de texto UART muestra el contenido recibido por serial.
+En el panel de configuración (`Ctrl+Tab`), un doble clic sobre un canal de la lista lo
+oculta o lo vuelve a mostrar en el gráfico; `Reset All Visible` restablece todos.
 
-- `Esconder Caja de Texto` oculta o muestra el panel.
-- `Show All Incoming Data` alterna entre mostrar todo el flujo recibido o solo el contenido procesado.
+**Ventana de texto UART.** Muestra el flujo recibido por el puerto serie como apoyo de
+diagnóstico. Se controla con *Mostrar Caja de Texto* y *Mostrar Todos los Datos*, en el menú
+Visualización.
 
-Esto permite usar la vista UART como apoyo de diagnóstico sin interferir con el gráfico.
+La aplicación mide continuamente el costo del repintado y, si supera la mitad del intervalo
+de refresco, reduce automáticamente la frecuencia de 50 a 30 cuadros por segundo y lo informa
+en la barra de estado. No requiere intervención.
 
-## 10. Grabación en CSV
+---
 
-La acción `Record stream` activa o desactiva la grabación del flujo entrante en CSV.
+## 9. Grabación y exportación
 
-- Cuando está activada, la aplicación abre un archivo CSV.
-- Cada muestra recibida se guarda junto con el índice real del punto del gráfico.
-- Si la grabación no puede abrirse, la acción se desactiva automáticamente.
-- Al desconectar o cerrar la sesión, el archivo se cierra.
+- **Grabar Stream (CSV)** (`Ctrl+S`): activa o desactiva el registro del flujo entrante. Con
+  una duración configurada, la grabación se habilita automáticamente y es obligatoria.
+- El encabezado del CSV incluye los metadatos del experimento y la versión de la aplicación.
+  Cada muestra se registra con su marca de tiempo en segundos, derivada del ritmo de ploteo
+  (20 muestras por segundo).
+- Junto al CSV se genera automáticamente un archivo `<nombre>_formato.html` con los mismos
+  datos, con formato y colores, para inspección visual rápida.
+- **Propiedades de grabación…**: informa el estado actual y ofrece acceso a la carpeta de
+  documentos.
+- **Exportar datos…**: vuelca a un archivo el contenido actual del gráfico.
 
-Nota: el encabezado y metadatos del CSV incluyen la versión de la aplicación (`v2.3.0`). El índice usado para cada fila corresponde al contador de muestras del ploteo (`dataPointCount`), que se sincroniza con lo mostrado en pantalla.
+---
 
-## 11. Mensajes de estado
+## 10. Perfiles de experimento
 
-La barra inferior muestra el estado operativo de la aplicación.
+Un perfil guarda la matriz de canales, el ancho de pulso, los cuatro retardos, el valor y la
+unidad de tiempo, y la fecha de creación. Se almacenan como archivos JSON en la carpeta de
+datos de la aplicación.
 
-Los estados principales son:
+- **Guardar Perfil…**: pide un nombre y confirma antes de sobrescribir.
+- **Cargar Perfil…**: aplica un perfil a la interfaz y lo marca como pendiente de aplicar, de
+  modo que hay que presionar `Enviar Datos` para transmitirlo al FPGA.
+- **Gestionar Perfiles…**: lista todos los perfiles con vista previa, y permite Cargar,
+  Eliminar, Renombrar y Cerrar.
 
-- `Desconectado`
-- `Listo para configurar`
-- `Listo para ejecutar`
-- `Adquiriendo`
-- `Pausado`
-- `Falla`
+---
 
-El mensaje cambia según la etapa del flujo y ayuda a saber qué acción corresponde hacer después.
+## 11. Menús y atajos
 
-## 12. Trabajo con perfiles
+### Puerto Serial
 
-La aplicación incluye soporte interno para perfiles operativos.
+| Ítem | Atajo |
+|---|---|
+| Conectar | Reproducir |
+| Desconectar | Detener |
+| Propiedades de Puerto… | — |
+| Guardar Perfil… / Cargar Perfil… / Gestionar Perfiles… | — |
+| Salir | `Ctrl+Q` |
 
-- `saveProfile()` guarda la configuración actual.
-- `loadProfile()` recupera una configuración previa.
-- `deleteProfile()` elimina un perfil guardado.
-- `getProfileNames()` lista los perfiles disponibles.
+### Visualización
 
-Los perfiles guardan la matriz activa, el ancho de pulso, los delays y el tiempo configurado.
+| Ítem | Atajo |
+|---|---|
+| Mostrar Caja de Texto | — |
+| Mostrar Todos los Datos | — |
+| Panel de configuración | `Ctrl+Tab` |
+| Pausa/Reanuda | Pausa |
+| Controles del Gráfico → AutoScale en Y / Limpiar Gráfico | — |
 
-## 13. Recuperación ante fallas
+### Grabación & Exportación
 
-Si la aplicación entra en estado `Falla`, la lógica interna puede registrar el evento y preparar una recuperación basada en la última conexión válida.
+| Ítem | Atajo |
+|---|---|
+| Grabar Stream (CSV) | `Ctrl+S` |
+| Exportar datos… | — |
+| Propiedades de grabación… | — |
 
-- Se conservan los parámetros de conexión usados anteriormente.
-- Se limpia el estado local de la matriz y del gráfico.
-- Se restablecen las métricas de salud.
+### Ayuda
 
-## 14. Formato de datos esperado
+| Ítem | Atajo |
+|---|---|
+| Cómo usar | `F1` |
+| Manual de Usuario | — |
+| Acerca de… | — |
 
-La aplicación espera mensajes que comiencen con `$` y terminen con `;`.
+---
 
-Ejemplo:
+## 12. Formato de datos esperado
+
+Tramas que comienzan con `$` y terminan con `;`, con los valores separados por espacios:
 
 ```c
-printf("$%d %d;", data1, data2);
+printf("$%d %d;", dato1, dato2);
 ```
 
-Los valores pueden ser enteros o decimales, según el formato que se esté enviando.
+Los valores pueden ser enteros o decimales. Los caracteres no válidos dentro de una trama se
+eliminan en silencio, y las tramas con campos vacíos o no numéricos se contabilizan como
+inválidas en la telemetría de salud; los campos numéricos que sobreviven pueden igualmente
+llegar al gráfico y al CSV, por lo que ante advertencias de tramas inválidas conviene revisar
+los datos registrados.
 
-## 15. Flujo recomendado de uso
+---
 
-1. Conectar el puerto.
-2. Elegir la matriz de datos.
-3. Ajustar tiempos y delays.
-4. Presionar `Enviar Datos`.
-5. Presionar `Connect` para iniciar la adquisición.
-6. Usar `Pause` si necesitás frenar sin cerrar el puerto.
-7. Usar `Disconnect` al terminar.
+## 13. Barra de estado
 
-## 16. Atajos visuales útiles
+| Indicador | Contenido |
+|---|---|
+| Coordenadas | Posición X e Y del cursor sobre el gráfico |
+| Mensaje de estado | Estado operativo y acción sugerida, con color según la situación |
+| `Exp:` | Tiempo transcurrido desde el inicio del experimento |
+| `Restante:` | Tiempo que falta para completar la duración configurada |
+| Salud de comunicación | Aparece solo ante degradación: naranja por encima del 10 % de tramas inválidas sostenido, rojo por encima del 25 % sostenido, caso en el que la aplicación pasa a *Falla* |
 
-- `How to use` abre la ventana de ayuda.
-- `Clear` limpia los datos visibles.
-- `Save PNG` exporta el gráfico.
-- `Record stream` habilita la grabación de datos.
+---
 
-Este manual describe el flujo operativo disponible en la versión `v2.3.0` de la aplicación.
+## 14. Resolución de problemas
 
-## 17. Notas de rendimiento y riesgos conocidos
-
-- Repintado frecuente: bajo cargas altas de datos el repintado del gráfico puede afectar el rendimiento y la responsividad; para mitigar, reduzca la cantidad de puntos visibles o aumente el intervalo de repintado.
-- Telemetría de paquetes inválidos: los paquetes no numéricos se ignoran y se registran para diagnóstico; actualmente no hay bloqueo preventivo automático sobre la adquisición.
-- Empaquetado: verifique que el instalador incluya los recursos y dependencias (licencias) al generar instaladores en `build/installer`.
+| Síntoma | Causa probable | Solución |
+|---|---|---|
+| La matriz se ve atenuada y no responde | El puerto no fue abierto, o hay una adquisición en curso | Conectar el puerto, o presionar Pausa |
+| Advertencia naranja o roja de tramas inválidas | Comunicación degradada por cableado, ruido o parámetros de puerto | Revisar la conexión y los parámetros. Si llegó a rojo, desconectar, corregir y reconectar |
+| La aplicación pasó a Falla al presionar `Enviar Datos` | El control previo detectó una condición inválida | Leer el motivo en la barra de estado, desconectar, corregir y repetir |
+| No aparece el puerto de la placa | Placa desconectada o driver USB-serie ausente | Verificar la conexión física y el puerto COM asignado |
+| No se puede iniciar con duración configurada | La grabación es obligatoria y el archivo no pudo abrirse | Verificar permisos de escritura en la carpeta de documentos |
+| La configuración no llega al FPGA | Hay cambios pendientes | Presionar `Enviar Datos`; mientras esté naranja hay cambios sin transmitir |
+| `Pausa/Reanuda` no reanuda | El experimento finalizó por duración alcanzada | Reconfigurar y presionar `Enviar Datos` para un nuevo ciclo |

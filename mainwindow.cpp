@@ -756,7 +756,7 @@ void MainWindow::buildMenus()
     ui->toolBar_2->setVisible(false);
 
     auto *actionSalir = new QAction("Salir", this);
-    actionSalir->setShortcut(QKeySequence::Quit);
+   actionSalir->setShortcut(QKeySequence(QStringLiteral("Ctrl+Q")));
     connect(actionSalir, &QAction::triggered, this, &MainWindow::on_actionSalir_triggered);
 
     auto *actionAutoScaleY = new QAction("AutoScale en Y", this);
@@ -2166,6 +2166,7 @@ MainWindow::PreflightResult MainWindow::performPreflightCheck()
     if (ui->actionRecord_stream->isChecked()) {
         if (!m_csvManager || !m_csvManager->isOpen()) {
             result.errorMessage = "Grabación CSV habilitada pero archivo no está abierto.";
+            result.success = false;
             return result;
         }
     }

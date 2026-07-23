@@ -21,7 +21,7 @@ AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 DefaultDirName={pf}\{#MyAppName}
 DisableProgramGroupPage=yes
-LicenseFile=res\lgplv3.rtf
+LicenseFile=GPL.txt
 OutputDir=.\build\installer
 OutputBaseFilename=serial_port_plotter-{#MyAppVersion}-installer
 SetupIconFile=res\icons\exe_icon.ico
@@ -38,6 +38,9 @@ Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescrip
 [Files]
 Source: ".\build\release\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: ".\build\installer\deps\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "GPL.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "MANUAL_USUARIO.md"; DestDir: "{app}"; Flags: ignoreversion
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Icons]

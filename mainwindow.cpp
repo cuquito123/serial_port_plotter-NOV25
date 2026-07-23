@@ -629,7 +629,9 @@ void MainWindow::updateExperimentTimeLabel()
                 updateTimer.stop();
                 plotting = false;
                 pauseExperimentTimer();
-                cambiarEstado(finishedMsg, "blue");
+                // Mensaje contextual en statusBar para informar finalización y CSV
+                // (no usar cambiarEstado aquí; la máquina de estados decidirá el texto)
+                ui->statusBar->showMessage(finishedMsg);
                 // Stop recording and close CSV cleanly
                 const bool csvWasOpen = (m_csvManager && m_csvManager->isOpen());
                 if (csvWasOpen) {
@@ -645,7 +647,7 @@ void MainWindow::updateExperimentTimeLabel()
                 } else {
                     ui->statusBar->showMessage("Duración alcanzada: experimento finalizado");
                 }
-                cambiarEstado("EXPERIMENTO FINALIZADO (tiempo alcanzado)", "blue");
+                // Transicionar estado; updateUIForState mostrará el mensaje correcto
                 setAppState(AppState::Paused);
             }
         }
@@ -969,9 +971,8 @@ void MainWindow::portOpenedSuccess()
     connected = true;
     plotting = false;  // NO iniciar plotting aqui. Esperar a EnviarDatos
 
-    // Transicion de maquina de estados
+    // Transicion de maquina de estados; updateUIForState() mostrará el mensaje
     setAppState(AppState::ReadyForConfiguration);
-    cambiarEstado("LISTO PARA CONFIGURAR. Presiona 'Enviar Datos'.", "blue");
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -1409,7 +1410,8 @@ void MainWindow::on_actionPause_Plot_triggered()
     // Toggle behavior: if currently acquiring, pause; if paused, resume.
     if (m_experimentFinished) {
         ui->statusBar->showMessage("El experimento ya finalizó. Reconfigurá o enviá nuevos datos para comenzar otro ciclo.");
-        cambiarEstado("EXPERIMENTO FINALIZADO", "blue");
+        // No llamar a cambiarEstado() aquí: dejar que updateUIForState() maneje
+        // el mensaje permanente. Solo asegurarse de que el estado esté en Paused.
         setAppState(AppState::Paused);
         return;
     }
@@ -1420,20 +1422,18 @@ void MainWindow::on_actionPause_Plot_triggered()
         updateTimer.start(m_plotUpdateIntervalMs);
                 plotting = true;
         ui->statusBar->showMessage("Plot reanudado. La adquisición y la grabación continúan.");
-                cambiarEstado("ADQUISICIÓN (En curso)", "green");
+                // Dejar que setAppState/updateUIForState actualice el mensaje de estado.
                 setAppState(AppState::Acquiring);
-        // Resume experiment timer only if recording is active
-        if (ui->actionRecord_stream->isChecked()) {
-            resumeExperimentTimer();
-        }
+        // El cronómetro de experimento siempre debe reanudarse al volver a adquirir.
+        resumeExperimentTimer();
         } else {
                 // Pause acquisition
                 logEvent(EventType::Stopped, "Pausando adquisición de datos");
                 updateTimer.stop();
                 plotting = false;
         ui->statusBar->showMessage("Plot pausado. Presiona 'Pausa/Reanuda' para continuar.");
-                cambiarEstado("PAUSA (Experimento Interrumpido)", "orange");
-                setAppState(AppState::Paused);
+            // Dejar que updateUIForState() establezca el mensaje permanente.
+            setAppState(AppState::Paused);
                 // Pause experiment timer
                 pauseExperimentTimer();
         }
@@ -1723,17 +1723,11 @@ void MainWindow::on_EnviarDatos_clicked()
     plotting = true;
     ui->statusBar->showMessage("Adquisición iniciada. Presioná 'Pausa/Reanuda' para pausar.");
 
-    // Transición de máquina de estados
-    cambiarEstado("ADQUISICIÓN (En curso)", "green");
+    // Transición de máquina de estados: confiar en updateUIForState para el mensaje
     setAppState(AppState::Acquiring);
 
-    // Iniciar timer de experimento y countdown si hay grabado habilitado
-    if (ui->actionRecord_stream->isChecked()) {
-        startExperimentTimer();
-    } else {
-        // Aunque no haya grabado, iniciar timer para mostrar countdown
-        startExperimentTimer();
-    }
+    // El cronómetro corre siempre, haya o no grabación activa.
+    startExperimentTimer();
 }
 void MainWindow::on_ResetearDatos_clicked()
 {
@@ -1944,6 +1938,12 @@ void MainWindow::setAppState(AppState newState)
         return; // No cambiar si ya está en ese estado
     }
 
+    if (!canTransitionToState(newState)) {
+        qWarning() << "Transición de estado inválida:" << getStateDisplayName(m_appState)
+                   << "->" << getStateDisplayName(newState);
+        return;
+    }
+
     // Registrar transición
     qDebug() << "Estado anterior:" << getStateDisplayName(m_appState)
              << "-> Estado nuevo:" << getStateDisplayName(newState);
@@ -2046,8 +2046,15 @@ void MainWindow::updateUIForState()
         color = "darkgreen";
         break;
     case AppState::Paused:
-        stateMsg += " - Pausa activa, presioná 'Pausa/Reanuda' para continuar";
-        color = "orange";
+        // Si el experimento ya terminó, mostrar mensaje específico en lugar
+        // del mensaje genérico de pausa para no confundir al operador.
+        if (m_experimentFinished) {
+            stateMsg = "Experimento finalizado - Reconfigurá y presioná 'Enviar Datos' para un nuevo ciclo";
+            color = "blue";
+        } else {
+            stateMsg += " - Pausa activa, presioná 'Pausa/Reanuda' para continuar";
+            color = "orange";
+        }
         break;
     case AppState::Fault:
         stateMsg += " - Error detectado, desconectá para recuperar";
@@ -2071,7 +2078,7 @@ bool MainWindow::canTransitionToState(AppState newState) const
     case AppState::Acquiring:
         return (newState == AppState::Paused || newState == AppState::Disconnected || newState == AppState::Fault);
     case AppState::Paused:
-        return (newState == AppState::Acquiring || newState == AppState::ReadyForConfiguration || newState == AppState::Disconnected || newState == AppState::Fault);
+        return (newState == AppState::Acquiring || newState == AppState::ReadyForConfiguration || newState == AppState::ReadyForExecution || newState == AppState::Disconnected || newState == AppState::Fault);
     case AppState::Fault:
         return (newState == AppState::Disconnected);
     default:

@@ -1075,7 +1075,7 @@ Y</string>
             <item>
              <widget class="QSpinBox" name="Ancho_de_pulso">
               <property name="alignment"><set>Qt::AlignCenter</set></property>
-              <property name="maximum"><number>1600</number></property>
+                                   <property name="maximum"><number>255</number></property>
              </widget>
             </item>
             <item>
@@ -1087,7 +1087,7 @@ Y</string>
             <item>
              <widget class="QSpinBox" name="Delay_A">
               <property name="alignment"><set>Qt::AlignCenter</set></property>
-              <property name="maximum"><number>1600</number></property>
+                                   <property name="maximum"><number>255</number></property>
              </widget>
             </item>
             <item>
@@ -1099,7 +1099,7 @@ Y</string>
             <item>
              <widget class="QSpinBox" name="Delay_B">
               <property name="alignment"><set>Qt::AlignCenter</set></property>
-              <property name="maximum"><number>1600</number></property>
+                                   <property name="maximum"><number>255</number></property>
              </widget>
             </item>
             <item>
@@ -1111,7 +1111,7 @@ Y</string>
             <item>
              <widget class="QSpinBox" name="Delay_C">
               <property name="alignment"><set>Qt::AlignCenter</set></property>
-              <property name="maximum"><number>1600</number></property>
+                                   <property name="maximum"><number>255</number></property>
              </widget>
             </item>
             <item>
@@ -1123,7 +1123,7 @@ Y</string>
             <item>
              <widget class="QSpinBox" name="Delay_D">
               <property name="alignment"><set>Qt::AlignCenter</set></property>
-              <property name="maximum"><number>1600</number></property>
+                                   <property name="maximum"><number>255</number></property>
              </widget>
             </item>
            </layout>

@@ -1,204 +1,216 @@
 # Serial Port Plotter
 
-Aplicación de Windows para visualizar datos en tiempo real desde un puerto serie. La aplicación es de 32 bits y está construida con Qt y la librería QCustomPlot.
+Software de instrumentación en C++/Qt para el comando y monitoreo del **detector de fotones en coincidencias múltiples** desarrollado en el Centro de Investigaciones Ópticas (CIOp — CONICET / CIC-PBA / UNLP).
 
-## Características
+El detector está implementado sobre una placa **FPGA DE0 Nano SoC** (Altera/Intel) programada en VHDL, que se comunica con la PC por **UART/RS232**. La aplicación configura el experimento, transmite los parámetros al FPGA, grafica los conteos en tiempo real y registra la adquisición en disco.
 
-- Sin límite de ejes: canales desconocidos/nuevos crean automáticamente un gráfico (paleta cíclica de 14 colores).
-- Sin límite de puntos: todos los datos recibidos se conservan para que el usuario pueda explorar datos antiguos.
-- Sin límite de baudios: probado hasta 912600 bps.
-- Zoom y arrastre con el ratón (rueda o clic, limitado al eje X).
-- Al mover el cursor sobre el gráfico se muestran los valores X e Y en la barra de estado.
-- Leyenda con nombre de canal (doble clic para modificar).
-- Selección de canal (clic sobre el texto de la leyenda).
-- Soporta enteros y números decimales positivos y negativos.
-- Exporta a PNG.
-- Exporta a CSV.
-- Autoescalado al gráfico visible.
+**Versión actual:** 2.3.0 · **Plataforma:** Windows · **Rama de trabajo:** `fix-jul`
 
-## Captura de pantalla
+---
 
-![Serial Port Plotter screenshot](res/screen_0.png)
+## Contexto
 
-## Cómo usar la aplicación
+Desarrollado en el marco del proyecto *"Diseño y desarrollo de dispositivos ópticos para comunicaciones cuánticas aeroespaciales"* (PICT-2020-SERIE A-I-GRF), orientado a distribución cuántica de claves (QKD) como carga útil del Satélite Universitario de la UNLP (estándar CubeSat).
 
-Envía los datos (enteros o decimales) por el puerto serie usando el formato esperado para que la aplicación pueda distinguir valores. Cada mensaje debe comenzar con `$` y terminar con `;` (punto y coma), con los valores separados por espacios. El botón de `Help` muestra instrucciones detalladas.
+---
 
-Usá la rueda del ratón sobre controles para cambiar valores y sobre el área del gráfico para hacer zoom.
+## Funcionalidad
 
-Cuando la adquisición está detenida/pausada, se puede arrastrar el área del gráfico y habilitar el guardado a fichero.
+- Configuración de canales de conteo y combinaciones de coincidencia mediante una matriz de 32 posiciones (4 filas A–D × 8 columnas).
+- Ajuste de ancho de pulso y retardos independientes para los cuatro canales de entrada.
+- Definición de la ventana temporal de integración y de la duración total del experimento.
+- Visualización en tiempo real de conteos individuales y en coincidencia (QCustomPlot).
+- Grabación en CSV con metadatos de experimento, más un HTML paralelo con formato.
+- Perfiles de experimento persistidos en JSON.
+- Supervisión de la salud de la comunicación y control previo a la ejecución.
 
-Para habilitar el guardado a fichero, presioná el botón de documento antes de iniciar el ploteo.
+### Hardware comandado
 
-Hacé doble clic en un canal en el panel de control del gráfico para ocultarlo/mostrarlo.
+| Parámetro | Valor |
+|---|---|
+| Canales | 12 (4 de conteo individual, el resto para coincidencias de hasta 4 canales) |
+| Matriz de configuración | 32 posiciones (4 × 8) |
+| Ventana de integración | 5,6 ms – 99.999.999 unidades base |
+| Ancho de pulso y retardos A–D | 0 – 255, normalizados a múltiplos de 8 por el FPGA |
+| Enlace | UART/RS232, 115200 8N1 (típico) |
 
-![File Save Button](res/screen_1.png)
+---
 
-## Serial Port Plotter v2.3.0
+## Arquitectura
 
-Esta versión organiza la ventana principal alrededor de una máquina de estados operativa, agrega validación previa antes de aplicar la configuración al FPGA y suma trazabilidad, telemetría y perfiles operativos. El flujo general pasa de una UI puramente reactiva a un ciclo más controlado entre configuración, aplicación y adquisición.
+El proyecto es una refactorización de una `MainWindow` monolítica heredada, reorganizada en seis módulos:
 
-### 1. Cambios estructurales
+| Módulo | Responsabilidad |
+|---|---|
+| `SerialPortManager` | Comunicación serie: apertura, cierre, lectura asíncrona, escritura no bloqueante |
+| `SerialMessageParser` | Parseo por máquina de estados del protocolo `$…;`, con validación y descarte de tramas inválidas |
+| `FpgaProtocol` | Construcción de paquetes, conversión de unidades de tiempo, etiquetas y mapeo de trama |
+| `PlotManager` | Visualización en tiempo real sobre QCustomPlot, con throttling adaptativo (50 → 30 fps) |
+| `CsvManager` | Exportación a CSV con metadatos y generación del HTML paralelo |
+| `ProfileManager` | Persistencia de perfiles de experimento en JSON |
 
-La arquitectura interna de MainWindow ahora incorpora estado operativo explícito, verificación previa y módulos auxiliares para seguimiento y persistencia. La lógica ya no depende solo de botones sueltos, sino de transiciones controladas entre estados.
+### Máquina de estados
 
-- Se agregó el `enum class AppState` en `mainwindow.hpp` con los estados `Disconnected`, `ReadyForConfiguration`, `ReadyForExecution`, `Acquiring`, `Paused` y `Fault`.
-- Se agregaron los métodos `setAppState()`, `currentAppState()`, `getStateDisplayName()`, `updateUIForState()` y `canTransitionToState()` para gobernar el flujo de la ventana principal.
-- Se incorporó la estructura `PreflightResult` junto con `performPreflightCheck()` para validar el puerto, los canales activos, el tiempo configurado y el estado de la grabación CSV antes de enviar la configuración.
-- Se sumaron los bloques `HealthMetrics`, `ConnectionParams`, `EventType`, `OperativeEvent` y `OperativeProfile` para telemetría, recuperación, registro y perfiles.
-- El constructor de `MainWindow` ahora conecta `SerialPortManager`, `SerialMessageParser`, `PlotManager` y `CsvManager` en una cadena de procesamiento clara: recepción cruda -> parseo -> nueva data -> ploteo -> guardado.
-- Se añadieron helpers de estado local como `markPendingChanges()`, `clearPendingChanges()`, `updatePendingChangesIndicator()`, `limpiarMatrizInterna()` y `limpiarPlot()`.
+`MainWindow` gobierna la disponibilidad de los controles mediante un `enum class AppState` con seis estados:
 
-### 2. Cambios visuales y de interfaz
-
-La interfaz quedó más segmentada y explícita. La pantalla principal separa mejor la configuración del gráfico y expone controles visuales para tiempo, matriz, canales y puerto.
-
-- Se usa un `QStackedWidget` llamado `stackedWidget` para alternar entre la vista de configuración y la vista de gráfico.
-- Se reorganizaron los controles en dos bloques visibles: `PlotControlsBox` y `Port Controls`.
-- Se agregaron o conservaron widgets de configuración directa como `TiempoBox`, `TiempoNum`, `EnviarDatos`, `ResetearDatos`, `Ancho_de_pulso`, `Delay_A`, `Delay_B`, `Delay_C` y `Delay_D`.
-- Se mantiene la matriz de selección con botones `GRAF_1` a `GRAF_8` y `A1_0` a `D8_31`, que ahora se colorean según su estado.
-- Se incorporó `listWidget_Channels` como panel de canales visibles, con acciones asociadas para AutoScale, Reset Visible y Show All Incoming Data.
-- `actionRecord_stream` sigue presente en la barra superior, y el botón `EnviarDatos` cambia visualmente cuando hay cambios pendientes de aplicar.
-
-### 3. Cambios en las capacidades para el usuario
-
-El usuario dispone ahora de un flujo operativo más guiado. La aplicación diferencia entre configurar, aplicar, ejecutar, pausar y desconectar, y habilita cada acción según el estado real de la sesión.
-
-- El usuario puede configurar matriz y tiempos antes de aplicar la configuración con `on_EnviarDatos_clicked()`.
-- El usuario debe pasar por `Connect` para iniciar la adquisición después de haber enviado la configuración, en lugar de iniciar la ejecución directamente.
-- El usuario puede pausar la adquisición con `on_actionPause_Plot_triggered()` sin cerrar el puerto serie.
-- El usuario puede volver a conectar o reanudar desde el estado `Paused`, sujeto a la validación de `performPreflightCheck()`.
-- El usuario puede ocultar o mostrar el texto UART con `actionEsconder_Caja_de_Texto` y alternar entre la vista de configuración y la del gráfico con `actionconfig` o `on_ir_a_grafico_clicked()`.
-- El usuario puede controlar la visualización de canales con `on_listWidget_Channels_itemDoubleClicked()`, `on_pushButton_ResetVisible_clicked()` y `on_pushButton_ShowallData_clicked()`.
-- La grabación CSV con `actionRecord_stream` queda condicionada al estado de adquisición o pausa, y se detiene al desconectar o cerrar el archivo.
-
-### 4. Cambios en el comportamiento del sistema
-
-El comportamiento interno ahora cubre más que recepción y ploteo: también valida, registra, recupera y persiste el estado operativo. El envío al FPGA, la grabación CSV y el mapeo de gráficos quedaron más controlados.
-
-- La recepción serial sigue el flujo SerialPortManager -> SerialMessageParser -> newData(QStringList) -> onNewDataArrived(), y el texto UART se muestra o filtra según filterDisplayedData.
-- onNewDataArrived() actualiza HealthMetrics con updateHealthMetrics() antes de enviar la muestra al PlotManager.
-- on_EnviarDatos_clicked() realiza un preflight, limpia el gráfico, genera etiquetas con FpgaProtocol::generateLabels(), fija el mapeo activo con PlotManager::setActiveTramaIndices() y envía buildStartCommand() más buildExtendedPacket().
-- on_ResetearDatos_clicked() envía buildResetCommand() y buildResetSweepPacket(), además de limpiar la matriz local y el texto UART.
-- El guardado CSV usa CsvManager::saveData() y toma el índice de punto desde el contador real del plot, de modo que la grabación acompaña la secuencia visual.
-- Se agregó trazabilidad operativa con logEvent(), getEventLogAsString() y exportEventLog(), registrando eventos como PortOpened, PortClosed, Started, Stopped, ConfigApplied, Reset, Recovery y Error.
-- Se incorporó persistencia de perfiles con saveProfile(), loadProfile(), deleteProfile(), getProfileNames() y getProfilesDirectory(), usando OperativeProfile::toJson() y OperativeProfile::fromJson() para serializar la configuración completa.
-
-## Envío de datos por puerto serie
-
-```c
-/* Ejemplo: plotea dos valores */
-printf("$%d %d;", data1, data2);
+```
+Disconnected → ReadyForConfiguration → ReadyForExecution → Acquiring ⇄ Paused
+                                                                   ↓
+                                                                 Fault
 ```
 
-Dependiendo de la frecuencia de envío y de la cantidad de puntos visible, podés ajustar el número de puntos mostrados. Por ejemplo, si envías datos cada 10 ms (100 Hz) y el ploteador muestra 500 puntos, representarás ~5 segundos de datos.
+Las transiciones se validan formalmente en `canTransitionToState()`, invocada desde `setAppState()`. El estado `Fault` se alcanza cuando el control previo detecta una condición inválida o cuando la proporción de tramas inválidas supera el 25 % sostenido; se sale de él desconectando.
 
-El software soporta números enteros y decimales (float/double).
+### Robustez
 
-## Código fuente
+- **Control previo (`performPreflightCheck()`):** verifica puerto conectado, al menos un canal activo, valor de tiempo mayor que cero, ventana de integración dentro de rango y archivo CSV abierto cuando la grabación está habilitada. Si falla, no se transmite la configuración.
+- **Telemetría de salud:** advertencia a partir del 10 % de tramas inválidas sostenido 5 s; paso a `Fault` a partir del 25 %.
+- **Throttling adaptativo:** el gráfico baja de 50 a 30 cuadros por segundo si el repintado consume más de la mitad del intervalo.
 
-El código fuente y el archivo `.pro` del proyecto Qt están disponibles. También hay un ejecutable independiente para quien no quiera compilar: ver [releases](https://github.com/CieNTi/serial_port_plotter/releases).
+---
+
+## Requisitos de compilación
+
+| Componente | Versión |
+|---|---|
+| Qt | 5.12.2 (módulos `serialport`, `printsupport`) |
+| Compilador | MinGW 7.3.0 32-bit |
+| Sistema | Windows |
+
+> La ruta de trabajo **no debe contener espacios**: `mingw32-make` falla si los hay.
+
+## Compilación
+
+Abrir la consola *Qt 5.12.2 (MinGW 7.3.0 32-bit)* desde el menú Inicio (trae el `PATH` ya cargado):
+
+```cmd
+cd /d C:\ruta\al\serial_port_plotter
+mkdir build-release
+cd build-release
+qmake ..\SerialPortPlotter.pro "CONFIG+=release"
+mingw32-make -j4
+```
+
+El ejecutable resultante es `build-release\release\serial_port_plotter.exe`.
+
+> El nombre del ejecutable (`serial_port_plotter.exe`) no coincide con el del archivo de proyecto (`SerialPortPlotter.pro`).
+
+Tras cambios de código alcanza con volver a ejecutar `mingw32-make -j4`. Solo hace falta correr `qmake` de nuevo si se modifica el `.pro` o se agregan archivos.
+
+## Empaquetado
+
+Carpeta portable con las dependencias de Qt y del runtime de MinGW:
+
+```cmd
+mkdir C:\deploy
+copy release\serial_port_plotter.exe C:\deploy
+windeployqt --release C:\deploy\serial_port_plotter.exe
+copy C:\Qt\Qt5.12.2\Tools\mingw730_32\bin\libgcc_s_dw2-1.dll C:\deploy
+copy C:\Qt\Qt5.12.2\Tools\mingw730_32\bin\libstdc++-6.dll C:\deploy
+copy C:\Qt\Qt5.12.2\Tools\mingw730_32\bin\libwinpthread-1.dll C:\deploy
+copy ..\..\MANUAL_USUARIO.md C:\deploy
+```
+
+Verificar ejecutando desde un `cmd` limpio, sin el `PATH` de Qt cargado.
+
+`MANUAL_USUARIO.md` debe acompañar al ejecutable: el menú *Ayuda → Manual de Usuario* lo lee del disco en tiempo de ejecución y no está embebido como recurso Qt.
+
+## Instalador
+
+`installer.iss` (Inno Setup) genera el instalador y copia el manual y las licencias al directorio de instalación, junto al `.exe`.
+
+---
+
+## Protocolo y formato de datos
+
+### Trama serie
+
+La aplicación espera tramas que comienzan con `$`, terminan con `;` y llevan los valores separados por espacios:
+
+```
+$valor1 valor2 … ;
+```
+
+Ejemplo de emisión desde el dispositivo:
+
+```c
+printf("$%d %d;", dato1, dato2);
+```
+
+El parser valida carácter a carácter y descarta las tramas que no cumplen el formato, contabilizándolas para la telemetría de salud. Los valores no numéricos se descartan durante el graficado y se registran como advertencia.
+
+### Salida CSV
+
+Cada archivo lleva un encabezado con los metadatos del experimento, incluida la versión de la aplicación. La primera columna es el **tiempo en segundos**. Junto al CSV se genera automáticamente un archivo `<nombre>_formato.html` con los mismos datos formateados, para inspección visual rápida.
+
+Cuando la duración de experimento configurada es mayor que cero, la grabación es obligatoria: la aplicación no inicia la adquisición sin un CSV abierto.
+
+### Perfiles
+
+Archivos JSON en la carpeta de datos de la aplicación. Cada perfil guarda la matriz de canales activos, el ancho de pulso, los cuatro retardos, el valor y la unidad de tiempo, y la fecha de creación.
+
+API estática de `ProfileManager`: `profilesDirectory()`, `profileNames()`, `profilePath()`, `saveProfile()`, `loadProfile()`, `deleteProfile()`, `renameProfile()`, `applyProfileToUi()`. La estructura `OperativeProfile` implementa `toJson()` / `fromJson()`.
+
+---
+
+## Flujo de trabajo
+
+1. Conectar la placa FPGA y verificar el puerto COM asignado.
+2. *Puerto Serial → Propiedades de Puerto…* para fijar puerto, baudios, bits de datos, paridad y bits de parada.
+3. *Puerto Serial → Conectar*. La aplicación pasa a **Listo para configurar** y reinicia la matriz de canales.
+4. Configurar la matriz, la columna a graficar y los parámetros temporales.
+5. **Enviar Datos**: ejecuta el control previo, abre el CSV si corresponde, transmite la configuración al FPGA e inicia la adquisición.
+6. *Pausa/Reanuda* detiene la adquisición sin cerrar el puerto y rehabilita los controles de configuración.
+7. *Desconectar* cierra el puerto, detiene el cronómetro y cierra el archivo CSV.
+
+### Atajos
+
+| Atajo | Acción |
+|---|---|
+| `F1` | Ayuda incorporada |
+| `Ctrl+S` | Activar / desactivar grabación en CSV |
+| `Ctrl+Tab` | Alternar con el panel de configuración alternativo |
+| `Ctrl+Q` | Salir |
+| Reproducir / Pausa / Detener | Conectar, Pausa/Reanuda y Desconectar (teclas multimedia) |
+
+---
+
+## Estructura del repositorio
+
+```
+SerialPortPlotter.pro        Archivo de proyecto qmake
+main.cpp                     Punto de entrada
+mainwindow.{h,cpp,ui}        Ventana principal y máquina de estados
+serialportmanager.{h,cpp}    Comunicación serie
+serialmessageparser.{h,cpp}  Parseo del protocolo $…;
+fpgaprotocol.{h,cpp}         Construcción de paquetes y conversiones
+plotmanager.{h,cpp}          Visualización en tiempo real
+csvmanager.{h,cpp}           Exportación CSV + HTML
+profilemanager.{h,cpp}       Perfiles JSON
+qcustomplot.{h,cpp}          Biblioteca de graficado (third-party)
+installer.iss                Script de Inno Setup
+MANUAL_USUARIO.md            Manual de usuario distribuido con el ejecutable
+tools/build_manual.py        Generación del manual en HTML
+```
+
+---
+
+## Documentación
+
+- **`MANUAL_USUARIO.md`** — manual de usuario completo, dirigido a operadores de laboratorio. Se distribuye junto al ejecutable y se abre desde *Ayuda → Manual de Usuario*.
+
+El manual es la referencia funcional del instrumento; este README cubre únicamente la construcción y la estructura del código.
+
+---
 
 ## Créditos
 
-- [Serial Port Plotter en mbed forums](https://developer.mbed.org/users/borislav/notebook/serial-port-plotter/) por [Borislav K](https://developer.mbed.org/users/borislav/)
-- Line Icon Set por [Situ Herrera](http://www.flaticon.com/authors/situ-herrera)
-- Lynny icon pack
-- Changelog (keepachangelog.com)
-- Base del software por [CieNTi](https://github.com/CieNTi)
-- Exportación CSV por [HackInventOrg](https://github.com/HackInventOrg)
+Desarrollado en el **Centro de Investigaciones Ópticas (CIOp)** — CONICET / CIC-PBA / UNLP.
 
-## Registro de cambios (Changelog)
+- **Desarrollo:** Santiago Agustín Salgado — Ingeniería Industrial, Facultad de Ingeniería, UNLP.
+- **Dirección:** Dr. Ing. Fabián Alfredo Videla.
+- **Codirección:** Dra. Lorena Rebón.
 
-Los cambios relevantes del proyecto se documentan a continuación. Este proyecto sigue [Semantic Versioning](http://semver.org/).
+Trabajo realizado en el marco de la Práctica Profesional Supervisada (480 h, ago 2025 – ago 2026).
 
-### [1.3.0] - 2018-08-01
-
-**Info**
-
-- Compilado con QT 5.11.1
-- Librerías QT actualizadas y nuevas funciones de ploteo
-
-**Añadido**
-
-- Botón para refrescar la lista de puertos COM
-- Control de visibilidad de canales para ocultar canales no deseados
-- Botón de AutoScale para el eje Y ajustando al valor máximo +10%
-- Soporte para guardar en CSV
-
-**Cambiado**
-
-- `qDarkStyle` actualizado a 2.5.4
-- `qCustomplot` actualizado a 2.0.1
-
-**Corrección de bugs**
-
-- El diálogo de renombrado de ejes ahora recibe foco correctamente al abrirse
-
-### [1.2.2] - 2018-07-26
-
-**Info**
-
-- Proyecto derivado de HackInvent desde 1.2.1
-
-**Añadido**
-
-- Cuadro de texto UART para debug
-- Control de visibilidad y filtrado del textbox
-
-### [1.2.1] - 2017-09-24
-
-**Corregido**
-
-- Soporte para float/double añadido
-- Corrección de fallo de compilación en Linux relacionado con `serial_port_plotter_res.o`
-
-### [1.2.0] - 2016-08-28
-
-**Añadido**
-
-- Soporte para números negativos
-- Soporte para tasas de baudios altas (probado hasta 912600 bps)
-
-### [1.1.0] - 2016-08-28
-
-**Añadido**
-
-- Recursos `qdarkstyle` originales (iconos funcionando)
-- Manifest y configuraciones recomendadas para Windows
-- Iconos *Line Icon Set* en 3 colores
-- Iconos *Lynny* en 3 colores
-- Archivo Inno Setup con script de empaquetado automático (probado en WinXP-32b y Win10-64b)
-- Botones de Play/Pause/Stop, Clear y Help en la barra de herramientas
-
-**Cambiado**
-
-- Estructura de recursos
-- `qcustomplot` actualizado a v1.3.2
-- El menú principal fue reemplazado por una barra de iconos para mejorar usabilidad
-
-**Eliminado**
-
-- Control sobre número de puntos
-- Borrar datos de gráficos previos
-- Botones separados *Connect* y *Start/Stop plot*
-
-### [1.0.0] - 2014-08-31
-
-**Añadido**
-
-- Trabajo original de Borislav Kereziev
-
-
-## Tareas pendientes (To-Do)
-
-- Refrescar lista de puertos
-- Autocompletar baudios y permitir personalizados por textbox (cuando UI COM)
-- PNG con transparencia
-- Separar `receive_data` de `process_data` para operaciones no limitadas por throttling
-
-[1.3.0]: https://github.com/Eriobis/serial_port_plotter/releases/tag/v1.3.0
-[1.2.2]: https://github.com/Eriobis/serial_port_plotter/releases/tag/v1.2.2
-[1.2.0]: https://github.com/CieNTi/serial_port_plotter/releases/tag/v1.2.0
-[1.1.0]: https://github.com/CieNTi/serial_port_plotter/releases/tag/v1.1.0
-[1.0.0]: https://github.com/CieNTi/serial_port_plotter/releases/tag/v1.0.0
+El proyecto deriva de una base de código abierto preexistente e incorpora **QCustomPlot** (GPL). Las licencias correspondientes se distribuyen con el instalador.

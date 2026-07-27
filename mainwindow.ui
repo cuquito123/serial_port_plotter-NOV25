@@ -961,13 +961,13 @@
              <widget class="QPushButton" name="pushButton_AutoScale">
               <property name="minimumSize">
                <size>
-          <width>56</width>
+          <width>78</width>
           <height>56</height>
                </size>
               </property>
               <property name="maximumSize">
                <size>
-          <width>56</width>
+          <width>78</width>
           <height>56</height>
                </size>
               </property>
@@ -1011,15 +1011,24 @@ Y</string>
           <item>
            <layout class="QVBoxLayout" name="verticalLayout_tiempo">
             <item>
-             <widget class="QComboBox" name="TiempoBox">
-              <item><property name="text"><string>uS</string></property></item>
-              <item><property name="text"><string>mS</string></property></item>
-              <item><property name="text"><string>S</string></property></item>
-              <item><property name="text"><string>Min</string></property></item>
-              <item><property name="text"><string>Hs</string></property></item>
+             <widget class="QLabel" name="label_tiempoIntegracion">
+              <property name="text"><string>Tiempo de integración</string></property>
              </widget>
             </item>
-            <item><widget class="QSpinBox" name="TiempoNum"/></item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_tiempoIntegracion">
+              <item><widget class="QSpinBox" name="TiempoNum"/></item>
+              <item>
+               <widget class="QComboBox" name="TiempoBox">
+                <item><property name="text"><string>uS</string></property></item>
+                <item><property name="text"><string>mS</string></property></item>
+                <item><property name="text"><string>S</string></property></item>
+                <item><property name="text"><string>Min</string></property></item>
+                <item><property name="text"><string>Hs</string></property></item>
+               </widget>
+              </item>
+             </layout>
+            </item>
             <item>
              <layout class="QHBoxLayout" name="horizontalLayout_experimentDuration">
               <item>

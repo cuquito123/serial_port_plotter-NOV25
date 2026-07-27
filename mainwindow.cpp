@@ -180,12 +180,12 @@ MainWindow::MainWindow (QWidget *parent) :
   connect(m_console, &Console::getData, this, &MainWindow::writeData);
   connect(m_serialManager, &SerialPortManager::rawDataReady, m_messageParser, &SerialMessageParser::appendData);
   connect(m_serialManager, &SerialPortManager::rawDataReady, this, [this](const QByteArray &raw) {
-      if (!filterDisplayedData) {
+      if (m_datosEnviados && !filterDisplayedData) {
           ui->textEdit_UartWindow->append(QString::fromLatin1(raw));
       }
   });
   connect(m_messageParser, &SerialMessageParser::messageParsed, this, [this](const QStringList &data, const QString &rawMessage) {
-      if (filterDisplayedData) {
+      if (m_datosEnviados && filterDisplayedData) {
           ui->textEdit_UartWindow->append(rawMessage);
       }
 
@@ -222,6 +222,12 @@ MainWindow::MainWindow (QWidget *parent) :
   });
 
   ui->setupUi (this);
+
+    {
+        QSizePolicy sp = ui->textEdit_UartWindow->sizePolicy();
+        sp.setRetainSizeWhenHidden(true);
+        ui->textEdit_UartWindow->setSizePolicy(sp);
+    }
 
     buildMenus();
 
@@ -301,7 +307,12 @@ MainWindow::MainWindow (QWidget *parent) :
 
       indiceUnidadAnterior = ui->TiempoBox->currentIndex();
       actualizarMaximoDeTiempo(indiceUnidadAnterior);
-    updateUIForState();
+
+      // setAppState() no hace nada si el estado nuevo es igual al actual, y
+      // m_appState ya arranca en Disconnected: sin esto, los controles quedaban
+      // con el "enabled" por defecto del diseñador (ej. EnviarDatos quedaba
+      // clickeable sin haber conectado el puerto).
+      updateUIForState();
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -743,10 +754,12 @@ void MainWindow::buildMenus()
     ui->actionHow_to_use->setShortcut(QKeySequence::HelpContents);
     ui->actionRecord_stream->setText("Grabar Stream (CSV)");
     ui->actionRecord_stream->setShortcut(QKeySequence::Save);
-    ui->actionEsconder_Caja_de_Texto->setText("Mostrar Caja de Texto");
     ui->actionEsconder_Caja_de_Texto->setChecked(true);
+    ui->actionEsconder_Caja_de_Texto->setText("Esconder Caja de Texto");
     ui->actionMostar_todos_los_datos->setText("Mostrar Todos los Datos");
     ui->actionPropiedades_de_Puerto->setText("Propiedades de Puerto...");
+    ui->actionconfig->setText("Volver a Configuración de Puerto");
+    ui->actionconfig->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_Tab));
 
     ui->toolBar->clear();
     ui->toolBar->addAction(ui->actionConnect);
@@ -778,8 +791,11 @@ void MainWindow::buildMenus()
     actionConfigPanel->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Tab));
     connect(actionConfigPanel, &QAction::triggered, this, &MainWindow::on_actionconfig_triggered);
 
-    connect(ui->actionPropiedades_de_Puerto, &QAction::triggered, this, &MainWindow::on_actionPropiedades_de_Puerto_triggered);
-    connect(ui->actionMostar_todos_los_datos, &QAction::toggled, this, &MainWindow::on_actionMostar_todos_los_datos_toggled);
+    // No conectar ui->actionPropiedades_de_Puerto ni ui->actionMostar_todos_los_datos
+    // manualmente acá: setupUi() ya los conecta automáticamente a
+    // on_actionPropiedades_de_Puerto_triggered() y on_actionMostar_todos_los_datos_toggled()
+    // por convención de nombres (QMetaObject::connectSlotsByName). Conectarlos de nuevo
+    // duplicaba la señal: "Propiedades de Puerto..." abría el diálogo dos veces por click.
 
     ui->menuBar->clear();
 
@@ -802,6 +818,8 @@ void MainWindow::buildMenus()
     menuPuertoSerial->addAction(actionSalir);
 
     QMenu *menuVisualizacion = ui->menuBar->addMenu("Visualización");
+    menuVisualizacion->addAction(ui->actionconfig);
+    menuVisualizacion->addSeparator();
     menuVisualizacion->addAction(ui->actionEsconder_Caja_de_Texto);
     menuVisualizacion->addAction(ui->actionMostar_todos_los_datos);
     menuVisualizacion->addSeparator();
@@ -925,6 +943,7 @@ void MainWindow::onPortClosed()
     updateTimer.stop();
     connected = false;
     plotting = false;
+    m_datosEnviados = false;
 
     if (m_csvManager) {
         m_csvManager->closeCsvFile();
@@ -1517,6 +1536,7 @@ void MainWindow::on_actionDisconnect_triggered()
       enviar = false;
       connected = false;
       plotting = false;
+      m_datosEnviados = false;
 
     setRecordingControlsState(false);
 
@@ -1653,6 +1673,9 @@ void MainWindow::on_EnviarDatos_clicked()
 
     m_experimentFinished = false;
 
+    ui->textEdit_UartWindow->clear();
+    m_datosEnviados = true;
+
     if (m_csvManager) {
         m_csvManager->setExperimentDurationMs(desiredMs);
     }
@@ -1767,6 +1790,7 @@ void MainWindow::on_actionEsconder_Caja_de_Texto_toggled(bool arg1)
     // Cuando está marcado, el cuadro de texto se muestra.
     ui->textEdit_UartWindow->setVisible(arg1);
     ui->pushButton_TextEditHide->setText(arg1 ? "Hide TextBox" : "Show TextBox");
+    ui->actionEsconder_Caja_de_Texto->setText(arg1 ? "Esconder Caja de Texto" : "Mostrar Caja de Texto");
 }
 
 void MainWindow::on_ir_a_grafico_clicked()
@@ -1991,8 +2015,12 @@ void MainWindow::updateUIForState()
     ui->comboStop->setEnabled(isDisconnected);
 
     // Botones de acción principal
-    ui->actionConnect->setEnabled(isDisconnected);
-    ui->actionDisconnect->setEnabled(!isDisconnected);
+    // Atados al estado real del puerto (connected), no al estado lógico:
+    // si se entra en Fault (ej. preflight check fallido) con el puerto
+    // realmente abierto, Desconectar debe seguir disponible para poder
+    // recuperarse, y viceversa si el puerto nunca llegó a abrirse.
+    ui->actionConnect->setEnabled(!connected);
+    ui->actionDisconnect->setEnabled(connected);
     ui->actionPause_Plot->setEnabled(isAcquiring || isPaused);
     ui->savePNGButton->setEnabled(!isDisconnected);
 
@@ -2021,7 +2049,11 @@ void MainWindow::updateUIForState()
     ui->ResetearDatos->setEnabled(canConfigure && (isReadyForConfig || isPaused));
 
     // Grabación CSV
-    const bool canRecord = isReadyForExecution || isAcquiring || isPaused;
+    // isReadyForExecution nunca se alcanza en la práctica (ningún setAppState()
+    // transiciona a ese estado), así que sin isReadyForConfig esta acción
+    // quedaba deshabilitada todo el tiempo entre conectar el puerto y arrancar
+    // la adquisición, que es justo cuando el usuario intenta armar la grabación.
+    const bool canRecord = isReadyForConfig || isReadyForExecution || isAcquiring || isPaused;
     ui->actionRecord_stream->setEnabled(canRecord);
 
     // Actualizar mensaje de estado

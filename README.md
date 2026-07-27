@@ -2,9 +2,9 @@
 
 Software de instrumentación científica para el **detector de fotones en coincidencias múltiples** desarrollado en el Centro de Investigaciones Ópticas (CIOp — CONICET / CIC-PBA / UNLP).
 
-La aplicación comanda y monitorea un detector implementado sobre una placa **FPGA DE0 Nano SoC** (Altera/Intel) programada en VHDL, que se comunica con la PC por **UART/RS232**. El dispositivo opera con 12 canales: 4 de conteo individual y el resto para coincidencias configurables de hasta 4 canales en simultáneo.
+El detector está implementado sobre una placa **FPGA DE0 Nano SoC** (Altera/Intel) programada en VHDL, que se comunica con la PC por **UART/RS232**, con 12 canales: 4 de conteo individual y el resto para coincidencias configurables de hasta 4 canales en simultáneo.
 
-Desarrollada en **C++ con el framework Qt**, permite configurar el experimento, aplicar la configuración al hardware, visualizar los conteos en tiempo real y registrar la adquisición para su procesamiento estadístico posterior.
+Desarrollada en **C++ con el framework Qt**, la aplicación configura el experimento, transmite los parámetros al FPGA, grafica los conteos en tiempo real y registra la adquisición en disco para su procesamiento estadístico posterior.
 
 **Versión actual:** 2.3.0
 
@@ -18,13 +18,35 @@ El desarrollo se realizó en el marco de una **Práctica Profesional Supervisada
 
 ---
 
+## Funcionalidad
+
+- Configuración de canales de conteo y combinaciones de coincidencia mediante una matriz de 32 posiciones (4 filas A–D × 8 columnas).
+- Ajuste de ancho de pulso y retardos independientes para los cuatro canales de entrada.
+- Definición de la ventana temporal de integración y de la duración total del experimento.
+- Visualización en tiempo real de conteos individuales y en coincidencia (QCustomPlot).
+- Grabación en CSV con metadatos de experimento, más un HTML paralelo con formato.
+- Perfiles de experimento persistidos en JSON.
+- Supervisión de la salud de la comunicación y control previo a la ejecución.
+
+### Hardware comandado
+
+| Parámetro | Valor |
+|---|---|
+| Canales | 12 (4 de conteo individual, el resto para coincidencias de hasta 4 canales) |
+| Matriz de configuración | 32 posiciones (4 × 8) |
+| Ventana de integración | 5,6 ms – 99.999.999 unidades base |
+| Ancho de pulso y retardos A–D | 0 – 255, normalizados a múltiplos de 8 por el FPGA |
+| Enlace | UART/RS232, 115200 8N1 (típico) |
+
+---
+
 ## Documentación
 
 | Documento | Contenido |
 |---|---|
 | [`MANUAL_USUARIO.md`](MANUAL_USUARIO.md) | Manual completo para operadores del instrumento: puesta en marcha, operación y referencia |
 
-El manual se distribuye junto al ejecutable y es accesible desde la propia aplicación en *Ayuda → Manual de Usuario*.
+El manual se distribuye junto al ejecutable y es accesible desde la propia aplicación en *Ayuda → Manual de Usuario*. Este README cubre únicamente la construcción y la estructura del código.
 
 ---
 
@@ -35,9 +57,9 @@ La base de código original consistía en una clase `MainWindow` monolítica que
 | Módulo | Responsabilidad |
 |---|---|
 | `SerialPortManager` | Comunicación serie: apertura, cierre, lectura asíncrona y escritura no bloqueante |
-| `SerialMessageParser` | Parseo por máquina de estados del protocolo `$…;`, con validación carácter a carácter |
+| `SerialMessageParser` | Parseo por máquina de estados del protocolo `$…;`, con validación carácter a carácter y descarte de tramas inválidas |
 | `FpgaProtocol` | Construcción de paquetes, conversión y normalización de tiempos, etiquetas y mapeo de trama |
-| `PlotManager` | Visualización en tiempo real con QCustomPlot |
+| `PlotManager` | Visualización en tiempo real sobre QCustomPlot, con throttling adaptativo (50 → 30 fps) |
 | `CsvManager` | Exportación a CSV con metadatos, más un archivo HTML de formato paralelo |
 | `ProfileManager` | Persistencia de perfiles de experimento en formato JSON |
 
@@ -51,16 +73,20 @@ FPGA → SerialPortManager → SerialMessageParser → MainWindow → PlotManage
 
 ### Máquina de estados
 
-La aplicación gobierna qué controles están disponibles mediante un estado operativo explícito (`enum class AppState`):
+`MainWindow` gobierna la disponibilidad de los controles mediante un estado operativo explícito (`enum class AppState`):
 
-`Disconnected` · `ReadyForConfiguration` · `ReadyForExecution` · `Acquiring` · `Paused` · `Fault`
+```
+Disconnected → ReadyForConfiguration → ReadyForExecution → Acquiring ⇄ Paused
+                                                                   ↓
+                                                                 Fault
+```
 
-Las transiciones se validan formalmente en `canTransitionToState()`, invocada desde `setAppState()`: cualquier cambio de estado no contemplado en el flujo operativo es rechazado y registrado.
+Las transiciones se validan formalmente en `canTransitionToState()`, invocada desde `setAppState()`: cualquier cambio de estado no contemplado en el flujo operativo es rechazado y registrado. El estado `Fault` se alcanza cuando el control previo detecta una condición inválida o cuando la proporción de tramas inválidas supera el 25 % sostenido; se sale de él desconectando.
 
 ### Robustez operativa
 
-- **Control previo a la ejecución** (`performPreflightCheck()`): valida puerto, canales activos, valor de tiempo, rango de la ventana de integración y disponibilidad del archivo CSV antes de transmitir la configuración.
-- **Telemetría de salud:** conteo de paquetes válidos, inválidos y perdidos, con umbrales de advertencia al 10 % y paso a estado `Fault` al 25 %.
+- **Control previo a la ejecución** (`performPreflightCheck()`): verifica puerto conectado, al menos un canal activo, valor de tiempo mayor que cero, ventana de integración dentro de rango y archivo CSV abierto cuando la grabación está habilitada. Si falla, no se transmite la configuración.
+- **Telemetría de salud:** conteo de paquetes válidos, inválidos y perdidos, con advertencia a partir del 10 % de tramas inválidas sostenido y paso a estado `Fault` al 25 %.
 - **Registro de eventos** con marca temporal y categorización por tipo, exportable.
 - **Recuperación ante fallos:** almacenamiento de los parámetros de la última conexión exitosa para reconexión automática.
 - **Ajuste adaptativo del gráfico:** reducción automática de 50 a 30 cuadros por segundo si el repintado consume más de la mitad del intervalo de refresco.
@@ -69,9 +95,17 @@ Las transiciones se validan formalmente en `canTransitionToState()`, invocada de
 
 ## Compilación
 
-**Requisitos:** Qt 5.12.2 con MinGW 7.3.0 (32 bits).
+### Requisitos
+
+| Componente | Versión |
+|---|---|
+| Qt | 5.12.2 (módulos `serialport`, `printsupport`) |
+| Compilador | MinGW 7.3.0 32-bit |
+| Sistema | Windows |
 
 > La ruta del proyecto no debe contener espacios: rompe a `mingw32-make`.
+
+### Pasos
 
 Desde la consola *Qt 5.12.2 (MinGW 7.3.0 32-bit)*, que trae el `PATH` ya configurado:
 
@@ -91,6 +125,8 @@ Para recompilar tras cambios en el código alcanza con `mingw32-make -j4`. Sólo
 
 ### Empaquetado
 
+Carpeta portable con las dependencias de Qt y del runtime de MinGW (comandos ejecutados desde `build-release`):
+
 ```cmd
 mkdir C:\deploy
 copy release\serial_port_plotter.exe C:\deploy
@@ -98,12 +134,16 @@ windeployqt --release C:\deploy\serial_port_plotter.exe
 copy C:\Qt\Qt5.12.2\Tools\mingw730_32\bin\libgcc_s_dw2-1.dll C:\deploy
 copy C:\Qt\Qt5.12.2\Tools\mingw730_32\bin\libstdc++-6.dll C:\deploy
 copy C:\Qt\Qt5.12.2\Tools\mingw730_32\bin\libwinpthread-1.dll C:\deploy
-copy MANUAL_USUARIO.md C:\deploy
+copy ..\MANUAL_USUARIO.md C:\deploy
 ```
 
 Conviene verificar el paquete ejecutándolo desde una consola limpia, sin el `PATH` de Qt cargado.
 
-El instalador de Windows se genera con Inno Setup a partir de `installer.iss`.
+`MANUAL_USUARIO.md` debe acompañar al ejecutable: el menú *Ayuda → Manual de Usuario* lo lee del disco en tiempo de ejecución y no está embebido como recurso Qt.
+
+### Instalador
+
+El instalador de Windows se genera con Inno Setup a partir de `installer.iss`, que copia el manual y las licencias al directorio de instalación junto al `.exe`.
 
 ---
 
@@ -125,20 +165,90 @@ La configuración se ajusta editando la sección `CONFIG` del script.
 
 ---
 
-## Formato de trama
+## Protocolo y formato de datos
 
-La aplicación espera mensajes que comiencen con `$` y terminen con `;`, con los valores separados por espacios:
+### Trama serie
+
+La aplicación espera tramas que comienzan con `$`, terminan con `;` y llevan los valores separados por espacios:
+
+```
+$valor1 valor2 … ;
+```
+
+Ejemplo de emisión desde el dispositivo:
 
 ```c
-/* Ejemplo de envío desde el dispositivo */
 printf("$%d %d;", dato1, dato2);
 ```
 
-Se admiten enteros y decimales, positivos y negativos. Las tramas que no cumplen el formato se descartan y se contabilizan como inválidas.
+Se admiten enteros y decimales, positivos y negativos. El parser valida carácter a carácter y descarta las tramas que no cumplen el formato, contabilizándolas para la telemetría de salud.
+
+### Salida CSV
+
+Cada archivo lleva un encabezado con los metadatos del experimento, incluida la versión de la aplicación. La primera columna es el **tiempo en segundos**. Junto al CSV se genera automáticamente un archivo `<nombre>_formato.html` con los mismos datos formateados, para inspección visual rápida.
+
+Cuando la duración de experimento configurada es mayor que cero, la grabación es obligatoria: la aplicación no inicia la adquisición sin un CSV abierto.
+
+### Perfiles
+
+Archivos JSON en la carpeta de datos de la aplicación. Cada perfil guarda la matriz de canales activos, el ancho de pulso, los cuatro retardos, el valor y la unidad de tiempo, y la fecha de creación.
+
+API estática de `ProfileManager`: `profilesDirectory()`, `profileNames()`, `profilePath()`, `saveProfile()`, `loadProfile()`, `deleteProfile()`, `renameProfile()`, `applyProfileToUi()`. La estructura `OperativeProfile` implementa `toJson()` / `fromJson()`.
+
+---
+
+## Flujo de trabajo
+
+1. Conectar la placa FPGA y verificar el puerto COM asignado.
+2. *Puerto Serial → Propiedades de Puerto…* para fijar puerto, baudios, bits de datos, paridad y bits de parada.
+3. *Puerto Serial → Conectar*. La aplicación pasa a **Listo para configurar** y reinicia la matriz de canales.
+4. Configurar la matriz, la columna a graficar y los parámetros temporales.
+5. **Enviar Datos**: ejecuta el control previo, abre el CSV si corresponde, transmite la configuración al FPGA e inicia la adquisición.
+6. *Pausa/Reanuda* detiene la adquisición sin cerrar el puerto y rehabilita los controles de configuración.
+7. *Desconectar* cierra el puerto, detiene el cronómetro y cierra el archivo CSV.
+
+### Atajos
+
+| Atajo | Acción |
+|---|---|
+| `F1` | Ayuda incorporada |
+| `Ctrl+S` | Activar / desactivar grabación en CSV |
+| `Ctrl+Tab` | Alternar con el panel de configuración alternativo |
+| `Ctrl+Q` | Salir |
+| Reproducir / Pausa / Detener | Conectar, Pausa/Reanuda y Desconectar (teclas multimedia) |
+
+---
+
+## Estructura del repositorio
+
+```
+SerialPortPlotter.pro         Archivo de proyecto qmake
+main.cpp                      Punto de entrada
+mainwindow.{hpp,cpp,ui}       Ventana principal y máquina de estados
+helpwindow.{hpp,cpp,ui}       Ventana de ayuda / manual embebido
+serialportmanager.{hpp,cpp}   Comunicación serie
+serialmessageparser.{hpp,cpp} Parseo del protocolo $…;
+fpgaprotocol.{hpp,cpp}        Construcción de paquetes y conversiones
+plotmanager.{hpp,cpp}         Visualización en tiempo real
+csvmanager.{hpp,cpp}          Exportación CSV + HTML
+profilemanager.{hpp,cpp}      Perfiles JSON
+qcustomplot/                  Biblioteca de graficado (third-party)
+installer.iss                 Script de Inno Setup
+inyector3.py                  Simulador de tramas para banco de pruebas virtual
+MANUAL_USUARIO.md             Manual de usuario distribuido con el ejecutable
+```
 
 ---
 
 ## Créditos
+
+Desarrollado en el **Centro de Investigaciones Ópticas (CIOp)** — CONICET / CIC-PBA / UNLP.
+
+- **Desarrollo:** Santiago Agustín Salgado — Ingeniería Industrial, Facultad de Ingeniería, UNLP.
+- **Dirección:** Dr. Ing. Fabián Alfredo Videla.
+- **Codirección:** Dra. Lorena Rebón.
+
+Trabajo realizado en el marco de la Práctica Profesional Supervisada (480 h, ago 2025 – ago 2026).
 
 Este software deriva del proyecto **Serial Port Plotter** de código abierto. Se reconoce el trabajo de sus autores originales:
 
@@ -154,4 +264,4 @@ Las adaptaciones para el detector de coincidencias múltiples, la reestructuraci
 
 ## Licencia
 
-Distribuido bajo la **GNU General Public License v3.0**. Ver [`LICENSE`](LICENSE) y [`GPL.txt`](GPL.txt).
+Distribuido bajo la **GNU General Public License v3.0**. Ver [`LICENSE`](LICENSE) y [`GPL.txt`](GPL.txt). El proyecto incorpora **QCustomPlot** (GPL); las licencias correspondientes se distribuyen con el instalador.

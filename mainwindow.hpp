@@ -208,6 +208,9 @@ private:
     /* Configuracion de visualizacion de texto UART */
     bool filterDisplayedData = true;
 
+    /* La caja de texto UART solo debe mostrar datos luego de presionar "Enviar Datos" */
+    bool m_datosEnviados = false;
+
     /* Estado del listado de canales */
     QStringListModel *channelListModel;
     QStringList     channelStrList;

@@ -2104,7 +2104,7 @@ void MainWindow::updateUIForState()
         color = "green";
         break;
     case AppState::Acquiring:
-        stateMsg += " - Adquisición y guardado en curso";
+        stateMsg += isRecording ? " - Adquisición y guardado en curso" : " - Adquisición en curso";
         color = "darkgreen";
         break;
     case AppState::Paused:

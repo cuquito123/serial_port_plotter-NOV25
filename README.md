@@ -39,8 +39,8 @@ El desarrollo se realizó en el marco de una **Práctica Profesional Supervisada
 |---|---|
 | Canales | 12 (4 de conteo individual, el resto para coincidencias de hasta 4 canales) |
 | Matriz de configuración | 32 posiciones (4 × 8) |
-| Ventana de integración | 5,6 ms – 99.999.999 unidades base |
-| Ancho de pulso y retardos A–D | 0 – 255, normalizados a múltiplos de 8 por el FPGA |
+| Ventana de integración | 5,6 ms – 99.999.999 unidades base, normalizada a múltiplos de 8 por el FPGA |
+| Ancho de pulso y retardos A–D | 0 – 255, sin normalización |
 | Enlace | UART/RS232, 115200 8N1 (típico) |
 
 ---

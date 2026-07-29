@@ -171,8 +171,8 @@ MainWindow::MainWindow (QWidget *parent) :
   m_serialManager(new SerialPortManager(this)),
   m_messageParser(new SerialMessageParser(this)),
   m_fpgaProtocol(new FpgaProtocol()),
-  m_fpgaProtocolApplied(new FpgaProtocol()),
-  m_plotManager(nullptr)
+  m_plotManager(nullptr),
+  m_fpgaProtocolApplied(new FpgaProtocol())
 
 {
   initActionsConnections();
@@ -1682,6 +1682,14 @@ void MainWindow::initActionsConnections()
 
 void MainWindow::on_EnviarDatos_clicked()
 {
+    // El botón ya queda deshabilitado en este caso (ver updateUIForState), pero
+    // se valida también acá para no reenviar una configuración distinta a mitad
+    // de un CSV abierto, lo que dejaría filas mal etiquetadas sin registro alguno.
+    if (m_appState == AppState::Paused && m_csvManager && m_csvManager->isOpen()) {
+        ui->statusBar->showMessage("Detené la grabación antes de reconfigurar y reenviar datos.");
+        return;
+    }
+
     const qint64 desiredMs = selectedExperimentDurationMs();
 
     m_experimentFinished = false;
@@ -2018,7 +2026,16 @@ void MainWindow::updateUIForState()
     const bool isPaused = (m_appState == AppState::Paused);
     const bool isFault = (m_appState == AppState::Fault);
 
-    const bool canConfigure = (isReadyForConfig || isReadyForExecution || isPaused) && !isFault;
+    // Con una grabación en curso, la pausa manual (no el fin natural por
+    // duración, que ya cierra el CSV antes de pasar a Paused) debe congelar
+    // también la configuración: si se permitiera cambiar la matriz/parámetros
+    // y reenviar con "Enviar Datos" a mitad de grabación, el CSV seguiría
+    // escribiendo filas con el mapeo de columnas viejo sin ningún registro
+    // del cambio, dejando el archivo mal etiquetado de forma silenciosa.
+    const bool isRecording = (m_csvManager && m_csvManager->isOpen());
+    const bool isPausedWhileRecording = isPaused && isRecording;
+
+    const bool canConfigure = (isReadyForConfig || isReadyForExecution || (isPaused && !isRecording)) && !isFault;
 
     // Controles de puerto COM
     ui->comboPort->setEnabled(isDisconnected);
@@ -2096,6 +2113,9 @@ void MainWindow::updateUIForState()
         if (m_experimentFinished) {
             stateMsg = "Experimento finalizado - Reconfigurá y presioná 'Enviar Datos' para un nuevo ciclo";
             color = "blue";
+        } else if (isPausedWhileRecording) {
+            stateMsg += " - Pausa activa. Grabación en curso: la configuración queda bloqueada hasta detener la grabación";
+            color = "orange";
         } else {
             stateMsg += " - Pausa activa, presioná 'Pausa/Reanuda' para continuar";
             color = "orange";
@@ -2224,7 +2244,7 @@ MainWindow::PreflightResult MainWindow::performPreflightCheck()
 
 // ─── Telemetría de Salud en Tiempo Real ────────────────────────────────────────
 
-void MainWindow::updateHealthMetrics(const QStringList &newData)
+void MainWindow::updateHealthMetrics(const QStringList &)
 {
     qint64 now = QDateTime::currentMSecsSinceEpoch();
     

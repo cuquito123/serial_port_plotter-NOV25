@@ -143,9 +143,13 @@ repetir.
 | Pausa/Reanuda | Detiene o retoma la adquisición sin cerrar el puerto | Pausa |
 | Desconectar | Cierra el puerto, detiene el cronómetro y cierra el CSV | Detener |
 
-Durante la pausa el puerto permanece abierto y los controles de configuración se habilitan,
-de modo que es posible reconfigurar y aplicar sin cerrar la conexión. El cronómetro se
-detiene al pausar y retoma la cuenta al reanudar, con o sin grabación activa.
+Durante la pausa el puerto permanece abierto. Si no hay una grabación activa, los controles
+de configuración se habilitan y es posible reconfigurar y aplicar sin cerrar la conexión. Si
+en cambio hay un CSV abierto (grabación en curso), la configuración queda bloqueada mientras
+dura la pausa: cambiar la matriz o los parámetros y reenviar a mitad de una grabación dejaría
+filas con el mapeo de columnas viejo sin ningún registro del cambio, así que hay que detener
+la grabación (*Grabar Stream*) antes de poder reconfigurar. El cronómetro se detiene al
+pausar y retoma la cuenta al reanudar, con o sin grabación activa.
 
 Si se configuró una duración, al alcanzarla la aplicación finaliza el experimento
 automáticamente, cierra el CSV y lo informa. Para iniciar otro ciclo hay que reconfigurar y
@@ -172,13 +176,16 @@ presionar `Enviar Datos`; `Pausa/Reanuda` no reanuda un experimento finalizado.
 | Conectar | Sí | No | No | No |
 | Desconectar | No | Sí | Sí | Sí |
 | Pausa/Reanuda | No | No | Sí | Sí |
-| Matriz, columnas, tiempos, retardos | No | Sí | No | Sí |
-| Enviar Datos | No | Sí | No | Sí |
-| Reset | No | Sí | No | Sí |
+| Matriz, columnas, tiempos, retardos | No | Sí | No | Sí, salvo con grabación activa |
+| Enviar Datos | No | Sí | No | Sí, salvo con grabación activa |
+| Reset | No | Sí | No | Sí, salvo con grabación activa |
 | Grabar Stream (CSV) | No | No | Sí | Sí |
 
 Los controles deshabilitados se muestran atenuados, de modo que su aspecto siempre coincide
-con su disponibilidad real.
+con su disponibilidad real. En *Pausado*, si hay una grabación en curso, la matriz, los
+parámetros, *Enviar Datos* y *Reset* quedan bloqueados hasta detener la grabación con *Grabar
+Stream*; esto no aplica al fin natural del experimento por duración, que ya cierra el CSV
+automáticamente antes de pasar a *Pausado*.
 
 ---
 
@@ -218,6 +225,11 @@ en la barra de estado. No requiere intervención.
 - Cada vez que se pausa o reanuda la adquisición con *Pausa/Reanuda*, se agrega una línea de
   comentario (`# Pausa en t=...` / `# Reanudado en t=...`) al CSV, para dejar constancia del
   hueco temporal en los datos.
+- Mientras haya una grabación en curso, pausar la adquisición bloquea la matriz, los
+  parámetros y *Enviar Datos*/*Reset*: no se puede reconfigurar y reenviar datos a mitad de
+  una grabación, porque el CSV ya abierto seguiría escribiendo filas con el mapeo de columnas
+  anterior sin dejar constancia del cambio. Para reconfigurar, primero hay que detener la
+  grabación con *Grabar Stream*.
 - Si la grabación no puede abrirse, la acción se desactiva automáticamente. Al desconectar o
   cerrar la sesión, el archivo se cierra.
 - **Propiedades de grabación…**: informa el estado actual y ofrece acceso a la carpeta de
@@ -312,7 +324,7 @@ los datos registrados.
 
 | Síntoma | Causa probable | Solución |
 |---|---|---|
-| La matriz se ve atenuada y no responde | El puerto no fue abierto, o hay una adquisición en curso | Conectar el puerto, o presionar Pausa |
+| La matriz se ve atenuada y no responde | El puerto no fue abierto, hay una adquisición en curso, o está pausado con una grabación activa | Conectar el puerto; presionar Pausa; o detener la grabación (*Grabar Stream*) antes de reconfigurar |
 | Advertencia naranja o roja de tramas inválidas | Comunicación degradada por cableado, ruido o parámetros de puerto | Revisar la conexión y los parámetros. Si llegó a rojo, desconectar, corregir y reconectar |
 | La aplicación pasó a Falla al presionar `Enviar Datos` | El control previo detectó una condición inválida | Leer el motivo en la barra de estado, desconectar, corregir y repetir |
 | No aparece el puerto de la placa | Placa desconectada o driver USB-serie ausente | Verificar la conexión física y el puerto COM asignado |

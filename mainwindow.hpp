@@ -306,7 +306,7 @@ private:
     };
     
     HealthMetrics m_healthMetrics;
-    void updateHealthMetrics(const QStringList &newData);
+    void updateHealthMetrics(const QStringList &);
     void resetHealthMetrics();
     QString getHealthMetricsString() const;
 

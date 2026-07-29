@@ -194,6 +194,8 @@ Cada archivo lleva un encabezado con los metadatos del experimento, incluida la 
 
 Cuando la duración de experimento configurada es mayor que cero, la grabación es obligatoria: la aplicación no inicia la adquisición sin un CSV abierto.
 
+El mapeo de columnas del CSV se fija al abrir el archivo (`CsvManager::openCsvFile()`) y no se actualiza mientras esté abierto. Por eso, mientras haya una grabación en curso, `updateUIForState()` bloquea la reconfiguración durante la pausa (matriz, parámetros y "Enviar Datos"): permitirla escribiría filas con el mapeo viejo después de un cambio de configuración, sin ningún registro del cambio en el archivo.
+
 ### Perfiles
 
 Archivos JSON en la carpeta de datos de la aplicación. Cada perfil guarda la matriz de canales activos, el ancho de pulso, los cuatro retardos, el valor y la unidad de tiempo, y la fecha de creación.
@@ -209,7 +211,7 @@ API estática de `ProfileManager`: `profilesDirectory()`, `profileNames()`, `pro
 3. *Puerto Serial → Conectar*. La aplicación pasa a **Listo para configurar** y reinicia la matriz de canales.
 4. Configurar la matriz, la columna a graficar y los parámetros temporales.
 5. **Enviar Datos**: ejecuta el control previo, abre el CSV si corresponde, transmite la configuración al FPGA e inicia la adquisición.
-6. *Pausa/Reanuda* detiene la adquisición sin cerrar el puerto y rehabilita los controles de configuración.
+6. *Pausa/Reanuda* detiene la adquisición sin cerrar el puerto y rehabilita los controles de configuración, salvo que haya una grabación en curso: en ese caso la configuración queda bloqueada hasta detener la grabación, para no reenviar datos con un mapeo de columnas distinto al que ya quedó escrito en el CSV abierto.
 7. *Desconectar* cierra el puerto, detiene el cronómetro y cierra el archivo CSV.
 
 ### Atajos

@@ -1,9 +1,9 @@
 /***************************************************************************
-**  This file is part of Serial Port Plotter                              **
+**  This file is part of MPCC — Multi-Photon Coincidence Counter (CIOp)   **
 **                                                                        **
 **                                                                        **
-**  Serial Port Plotter is a program for plotting integer data from       **
-**  serial port using Qt and QCustomPlot                                  **
+**  MPCC is a program for plotting integer data from serial port using    **
+**  Qt and QCustomPlot                                                    **
 **                                                                        **
 **  This program is free software: you can redistribute it and/or modify  **
 **  it under the terms of the GNU General Public License as published by  **
@@ -44,7 +44,7 @@ int main(int argc, char *argv[])
     MainWindow w;
     QIcon appIcon(":/serial_port_plotter/icons/serial_port_icon.icns");
     w.setWindowIcon(appIcon);
-    w.setWindowTitle("Serial Port Plotter v2.3.0");
+    w.setWindowTitle("MPCC — Multi-Photon Coincidence Counter (CIOp) v2.3.0");
     w.show();
 
     // Entra al bucle principal de eventos.

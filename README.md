@@ -1,4 +1,4 @@
-# Serial Port Plotter
+# MPCC — Multi-Photon Coincidence Counter (CIOp)
 
 Software de instrumentación científica para el **detector de fotones en coincidencias múltiples** desarrollado en el Centro de Investigaciones Ópticas (CIOp — CONICET / CIC-PBA / UNLP).
 
@@ -7,6 +7,11 @@ El detector está implementado sobre una placa **FPGA DE0 Nano SoC** (Altera/Int
 Desarrollada en **C++ con el framework Qt**, la aplicación configura el experimento, transmite los parámetros al FPGA, grafica los conteos en tiempo real y registra la adquisición en disco para su procesamiento estadístico posterior.
 
 **Versión actual:** 2.3.0
+
+## Captura de pantalla
+
+![MPCC — Multi-Photon Coincidence Counter (CIOp) screenshot](res/screen_0.png)
+![MPCC — Multi-Photon Coincidence Counter (CIOp) screenshot](res/screen_1.png)
 
 ---
 
@@ -63,7 +68,7 @@ La base de código original consistía en una clase `MainWindow` monolítica que
 | `CsvManager` | Exportación a CSV con metadatos, más un archivo HTML de formato paralelo |
 | `ProfileManager` | Persistencia de perfiles de experimento en formato JSON |
 
-`MainWindow` quedó como **coordinador**: instancia los módulos, los conecta mediante señales y slots, y gobierna la máquina de estados de la aplicación.
+`MainWindow` quedó como **coordinador**: instancia los módulos, los conecta mediante señales y slots (recepción cruda → parseo → nueva data → ploteo → guardado), y gobierna la máquina de estados de la aplicación.
 
 **Flujo de datos:**
 
@@ -73,7 +78,7 @@ FPGA → SerialPortManager → SerialMessageParser → MainWindow → PlotManage
 
 ### Máquina de estados
 
-`MainWindow` gobierna la disponibilidad de los controles mediante un estado operativo explícito (`enum class AppState`):
+`MainWindow` gobierna la disponibilidad de los controles mediante un estado operativo explícito (`enum class AppState`, definido en `mainwindow.hpp`):
 
 ```
 Disconnected → ReadyForConfiguration → ReadyForExecution → Acquiring ⇄ Paused
@@ -81,14 +86,14 @@ Disconnected → ReadyForConfiguration → ReadyForExecution → Acquiring ⇄ P
                                                                  Fault
 ```
 
-Las transiciones se validan formalmente en `canTransitionToState()`, invocada desde `setAppState()`: cualquier cambio de estado no contemplado en el flujo operativo es rechazado y registrado. El estado `Fault` se alcanza cuando el control previo detecta una condición inválida o cuando la proporción de tramas inválidas supera el 25 % sostenido; se sale de él desconectando.
+Las transiciones se validan formalmente en `canTransitionToState()`, invocada desde `setAppState()`: cualquier cambio de estado no contemplado en el flujo operativo es rechazado y registrado. El estado `Fault` se alcanza cuando el control previo detecta una condición inválida o cuando la proporción de tramas inválidas supera el 25 % sostenido; se sale de él desconectando. `updateUIForState()` y `getStateDisplayName()` completan el gobierno del estado sobre la UI.
 
 ### Robustez operativa
 
-- **Control previo a la ejecución** (`performPreflightCheck()`): verifica puerto conectado, al menos un canal activo, valor de tiempo mayor que cero, ventana de integración dentro de rango y archivo CSV abierto cuando la grabación está habilitada. Si falla, no se transmite la configuración.
-- **Telemetría de salud:** conteo de paquetes válidos, inválidos y perdidos, con advertencia a partir del 10 % de tramas inválidas sostenido y paso a estado `Fault` al 25 %.
-- **Registro de eventos** con marca temporal y categorización por tipo, exportable.
-- **Recuperación ante fallos:** almacenamiento de los parámetros de la última conexión exitosa para reconexión automática.
+- **Control previo a la ejecución** (`performPreflightCheck()`, con la estructura `PreflightResult`): verifica puerto conectado, al menos un canal activo, valor de tiempo mayor que cero, ventana de integración dentro de rango y archivo CSV abierto cuando la grabación está habilitada. Si falla, no se transmite la configuración.
+- **Telemetría de salud** (`HealthMetrics`): conteo de paquetes válidos, inválidos y perdidos, con advertencia a partir del 10 % de tramas inválidas sostenido y paso a estado `Fault` al 25 %.
+- **Registro de eventos** (`EventType`, `OperativeEvent`) con marca temporal y categorización por tipo (`PortOpened`, `PortClosed`, `Started`, `Stopped`, `ConfigApplied`, `Reset`, `Recovery`, `Error`), exportable con `exportEventLog()`.
+- **Recuperación ante fallos** (`ConnectionParams`): almacenamiento de los parámetros de la última conexión exitosa para reconexión automática.
 - **Ajuste adaptativo del gráfico:** reducción automática de 50 a 30 cuadros por segundo si el repintado consume más de la mitad del intervalo de refresco.
 
 ---
@@ -161,7 +166,7 @@ El inyector genera tramas con el formato del protocolo a 20 Hz, modelando cada c
 
 **No valida:** temporización real de la FPGA, ruido eléctrico ni comportamiento del adaptador USB-serie físico. Eso sigue requiriendo el banco con osciloscopio y generador de señales.
 
-La configuración se ajusta editando la sección `CONFIG` del script.
+La configuración se ajusta editando la sección `CONFIG` del script. `inyector_corrupto.py` es una variante que además inyecta tramas corruptas (campos faltantes, texto no numérico, delimitadores rotos, basura binaria, tramas truncadas) para probar la robustez del parser y la telemetría de salud frente a datos malformados.
 
 ---
 
@@ -235,6 +240,7 @@ profilemanager.{hpp,cpp}      Perfiles JSON
 qcustomplot/                  Biblioteca de graficado (third-party)
 installer.iss                 Script de Inno Setup
 inyector3.py                  Simulador de tramas para banco de pruebas virtual
+inyector_corrupto.py          Variante del inyector con tramas corruptas
 MANUAL_USUARIO.md             Manual de usuario distribuido con el ejecutable
 ```
 
@@ -259,6 +265,42 @@ Este software deriva del proyecto **Serial Port Plotter** de código abierto. Se
 - Iconos: *Line Icon Set* por [Situ Herrera](http://www.flaticon.com/authors/situ-herrera) y *Lynny icon pack*
 
 Las adaptaciones para el detector de coincidencias múltiples, la reestructuración modular y las funcionalidades de robustez operativa fueron desarrolladas en el CIOp.
+
+---
+
+## Historial de versiones anterior al CIOp
+
+Antes de la adaptación al detector de coincidencias múltiples, el proyecto base (*Serial Port Plotter*) siguió este historial, documentado según [Semantic Versioning](http://semver.org/):
+
+### [1.3.0] - 2018-08-01
+
+- Compilado con Qt 5.11.1; librerías Qt actualizadas y nuevas funciones de ploteo.
+- Añadido: botón para refrescar la lista de puertos COM, control de visibilidad de canales, AutoScale del eje Y (+10 %), soporte para guardar en CSV.
+- Cambiado: `qDarkStyle` a 2.5.4, `QCustomPlot` a 2.0.1.
+- Corregido: foco del diálogo de renombrado de ejes al abrirse.
+
+### [1.2.2] - 2018-07-26
+
+- Proyecto derivado de HackInvent desde 1.2.1.
+- Añadido: cuadro de texto UART para debug, con control de visibilidad y filtrado.
+
+### [1.2.1] - 2017-09-24
+
+- Corregido: soporte para float/double, y fallo de compilación en Linux relacionado con `serial_port_plotter_res.o`.
+
+### [1.2.0] - 2016-08-28
+
+- Añadido: soporte para números negativos y para tasas de baudios altas (probado hasta 912600 bps).
+
+### [1.1.0] - 2016-08-28
+
+- Añadido: recursos `qdarkstyle`, manifest de Windows, iconos *Line Icon Set* y *Lynny*, script de empaquetado con Inno Setup, botones de Play/Pause/Stop/Clear/Help.
+- Cambiado: estructura de recursos, `QCustomPlot` a v1.3.2, menú principal reemplazado por barra de iconos.
+- Eliminado: control sobre número de puntos, borrado de datos previos, botones separados *Connect* y *Start/Stop plot*.
+
+### [1.0.0] - 2014-08-31
+
+- Trabajo original de Borislav Kereziev.
 
 ---
 

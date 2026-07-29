@@ -6,7 +6,7 @@
 #include <QMessageBox>
 #include <QWidget>
 #include <QDebug>
-#include <QFileInfo>
+#include <QTextCodec>
 
 namespace {
 QString emptyColumnLabel()
@@ -61,24 +61,16 @@ bool CsvManager::openCsvFile(QWidget *parent)
     }
 
     m_csvStream = new QTextStream(m_csvFile);
-    m_csvStream->setCodec("UTF-8");
-    m_csvStream->setGenerateByteOrderMark(true);
+    // Se usa la codificación ANSI del sistema (sin BOM) en vez de UTF-8: Excel en
+    // Windows, al abrir un .csv con ";" como delimitador con doble clic, suele
+    // ignorar el BOM UTF-8 y reinterpretar los bytes como ANSI, mostrando
+    // caracteres corruptos (mojibake) en tildes y demás símbolos no ASCII.
+    // La codificación ANSI local es exactamente lo que Excel asume por defecto
+    // en ese flujo, así que coincide sin ambigüedad.
+    m_csvStream->setCodec(QTextCodec::codecForLocale());
 
     // Record start timestamp for metadata
     m_experimentStart = QDateTime::currentDateTime();
-
-    // Salida visual adicional: HTML con formato y colores.
-    const QFileInfo csvInfo(filePath);
-    const QString htmlPath = csvInfo.path() + "/" + csvInfo.completeBaseName() + "_formato.html";
-    m_htmlFile = new QFile(htmlPath);
-    if (m_htmlFile->open(QIODevice::WriteOnly | QIODevice::Text)) {
-        m_htmlStream = new QTextStream(m_htmlFile);
-        m_htmlStream->setCodec("UTF-8");
-    } else {
-        delete m_htmlFile;
-        m_htmlFile = nullptr;
-        m_htmlStream = nullptr;
-    }
 
     // Construir mapeo fijo de 8 columnas
     m_fpgaProtocol->fillCsvMapping(m_csvTramaIdx, m_csvLabels);
@@ -112,22 +104,6 @@ void CsvManager::closeCsvFile()
         m_csvStream = nullptr;
     }
 
-    if (m_htmlStream) {
-        *m_htmlStream << "  </tbody>\n"
-                        "</table>\n"
-                        "</body>\n"
-                        "</html>\n";
-        m_htmlStream->flush();
-        delete m_htmlStream;
-        m_htmlStream = nullptr;
-    }
-
-    if (m_htmlFile) {
-        m_htmlFile->close();
-        delete m_htmlFile;
-        m_htmlFile = nullptr;
-    }
-
     m_csvFile->close();
     delete m_csvFile;
     m_csvFile = nullptr;
@@ -152,30 +128,17 @@ void CsvManager::saveData(const QStringList &newData, int dataPointNumber)
     const QString tiempoTxt = QString::number(tiempo_s, 'f', 3);
     *m_csvStream << tiempoTxt;
 
-    if (m_htmlStream) {
-        *m_htmlStream << "    <tr>\n";
-        *m_htmlStream << "      <td class=\"tiempo\">" << tiempoTxt.toHtmlEscaped() << "</td>\n";
-    }
-
     // 8 columnas fijas — una por columna de la grilla (col1→col8)
     for (int col = 0; col < 8; col++) {
         int tramIdx = m_csvTramaIdx[col];
         if (tramIdx >= 0 && tramIdx < newData.size()) {
             const QString value = newData[tramIdx];
             *m_csvStream << ";" << value;
-            if (m_htmlStream)
-                *m_htmlStream << "      <td>" << value.toHtmlEscaped() << "</td>\n";
         } else {
             *m_csvStream << ";";   // columna vacía → celda vacía
-            if (m_htmlStream)
-                *m_htmlStream << "      <td class=\"empty\">" << emptyColumnLabel().toHtmlEscaped() << "</td>\n";
         }
     }
     *m_csvStream << "\n";
-
-    if (m_htmlStream) {
-        *m_htmlStream << "    </tr>\n";
-    }
 
     m_csvFlushCounter++;
     if (m_csvFlushCounter >= 100) {
@@ -184,13 +147,30 @@ void CsvManager::saveData(const QStringList &newData, int dataPointNumber)
     }
 }
 
+// Escribe un comentario marcando pausa/reanudación de la adquisición.
+void CsvManager::logPauseEvent(bool paused)
+{
+    if (!m_csvStream) return;
+
+    // Tiempo real transcurrido desde el inicio del experimento, no el contador
+    // de muestras: éste último se congela en 0 si todavía no llegó ningún dato,
+    // lo que hacía que el marcador siempre mostrara "t=0.000s".
+    const double tiempo_s = m_experimentStart.isValid()
+        ? m_experimentStart.msecsTo(QDateTime::currentDateTime()) / 1000.0
+        : 0.0;
+    *m_csvStream << "# " << (paused ? "Pausa" : "Reanudado")
+                 << " en t=" << QString::number(tiempo_s, 'f', 3) << "s ("
+                 << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss") << ")\n";
+    m_csvStream->flush();
+}
+
 // Escribe metadatos de experimento y fila de titulos de columnas.
 void CsvManager::buildHeaders()
 {
     if (!m_csvStream) return;
 
     // Metadata
-    *m_csvStream << "# Experimento: Serial Port Plotter v2.3.0\n";
+    *m_csvStream << "# Experimento: MPCC — Multi-Photon Coincidence Counter (CIOp) v2.3.0\n";
     *m_csvStream << "# Fecha: " << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss") << "\n";
     if (m_experimentDurationMs > 0) {
         qint64 secs = m_experimentDurationMs / 1000;
@@ -198,7 +178,9 @@ void CsvManager::buildHeaders()
     } else {
         *m_csvStream << "# Duración (s): (sin especificar)\n";
     }
-    *m_csvStream << "# Separador: punto y coma (;)\n";
+    // Sin el ";" literal: al ser el delimitador del propio CSV, un ";" dentro
+    // de esta línea de comentario la partiría en dos columnas al abrirla.
+    *m_csvStream << "# Separador de columnas: punto y coma\n";
     *m_csvStream << "#\n";
 
     // Fila de títulos de columna
@@ -214,59 +196,4 @@ void CsvManager::buildHeaders()
     }
     *m_csvStream << "\n";
     m_csvStream->flush();
-
-    if (m_htmlStream) {
-        buildHtmlHeaders();
-        // Inject start time into HTML meta area if available
-        if (m_experimentStart.isValid()) {
-            *m_htmlStream << "  <p class=\"meta\">Start Time: " << m_experimentStart.toString("yyyy-MM-dd HH:mm:ss").toHtmlEscaped() << "</p>\n";
-        }
-    }
-}
-
-void CsvManager::buildHtmlHeaders()
-{
-    if (!m_htmlStream) return;
-
-    *m_htmlStream
-        << "<!doctype html>\n"
-           "<html lang=\"es\">\n"
-           "<head>\n"
-           "  <meta charset=\"utf-8\">\n"
-           "  <title>Experimento - Serial Port Plotter</title>\n"
-           "  <style>\n"
-           "    :root { color-scheme: light; }\n"
-           "    body { margin: 24px; background: #f6f8fc; color: #1f2937; font-family: Segoe UI, Arial, sans-serif; }\n"
-           "    h1 { margin: 0 0 8px; font-size: 22px; }\n"
-           "    .meta { margin: 0 0 16px; color: #4b5563; }\n"
-           "    table { border-collapse: collapse; width: 100%; background: #ffffff; border: 1px solid #d6dde8; }\n"
-           "    thead th { background: linear-gradient(90deg, #0b4f8a, #0e7490); color: #ffffff; font-weight: 600; }\n"
-           "    th, td { border: 1px solid #d6dde8; padding: 6px 10px; text-align: center; }\n"
-           "    tbody tr:nth-child(odd) { background: #f8fbff; }\n"
-           "    tbody tr:hover { background: #eaf4ff; }\n"
-           "    td.tiempo { font-weight: 600; color: #0f3d66; }\n"
-           "    td.empty { color: #94a3b8; font-style: italic; }\n"
-           "  </style>\n"
-           "</head>\n"
-           "<body>\n"
-           "  <h1>Experimento: Serial Port Plotter v2.3.0</h1>\n"
-           "  <p class=\"meta\">Fecha: " << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss").toHtmlEscaped() << "</p>\n"
-           "<table>\n"
-           "  <thead>\n"
-           "    <tr>\n"
-           "      <th>Tiempo (s)</th>\n";
-
-    for (int col = 0; col < 8; col++) {
-        QString titulo = QString("Col %1").arg(col + 1);
-        if (!m_csvLabels[col].isEmpty())
-            titulo += " - " + m_csvLabels[col];
-        else
-            titulo += " - " + emptyColumnLabel();
-        *m_htmlStream << "      <th>" << titulo.toHtmlEscaped() << "</th>\n";
-    }
-
-    *m_htmlStream
-        << "    </tr>\n"
-           "  </thead>\n"
-           "  <tbody>\n";
 }

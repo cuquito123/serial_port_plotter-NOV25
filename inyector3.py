@@ -1,5 +1,5 @@
 """
-inyector3.py — Simulador de trama FPGA para SerialPortPlotter v2.3.0
+inyector3.py — Simulador de trama FPGA para MPCC — Multi-Photon Coincidence Counter (CIOp) v2.3.0
 =====================================================================
 Emula el formato de trama que manda la FPGA:
     $D C B A col1 col2 col3 col4 0 0 0 0;

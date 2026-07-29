@@ -1,11 +1,11 @@
-# Manual de Usuario — MPCC — Multi-Photon Coincidence Counter (CIOp) v2.3.0
+# Manual de Usuario — MPCC — Multi-Photon Coincidence Counter (CIOp) v3.0.0
 
 Software de instrumentación para el detector de fotones en coincidencias múltiples basado en FPGA.
 Centro de Investigaciones Ópticas (CIOp) — CONICET · CIC-PBA · UNLP.
 
 > Este archivo es la versión de consulta rápida que acompaña al ejecutable y se abre desde
 > **Ayuda → Manual de Usuario**. La versión completa, con figuras, es el documento
-> *Manual de Usuario — MPCC — Multi-Photon Coincidence Counter (CIOp) v2.3.0* (formato Word).
+> *Manual de Usuario — MPCC — Multi-Photon Coincidence Counter (CIOp) v3.0.0* (formato Word).
 
 ---
 
@@ -92,8 +92,10 @@ configuración que se transmite al FPGA.
 
 ### 4.2. Selectores de columna
 
-La fila de botones numerados del 1 al 8 determina qué columna de la trama se representa en
-el gráfico. Es una selección excluyente.
+La fila de botones numerados del 1 al 8, situada sobre la matriz, es un parámetro de testing
+para la FPGA: el botón presionado se transmite como parte de la trama de configuración, pero
+no afecta a los resultados del experimento ni interfiere en la representación gráfica o el
+guardado de datos.
 
 ### 4.3. Parámetros temporales
 
@@ -220,8 +222,6 @@ en la barra de estado. No requiere intervención.
 - El encabezado del CSV incluye los metadatos del experimento y la versión de la aplicación.
   Cada muestra se registra con su marca de tiempo en segundos, derivada del ritmo de ploteo
   (20 muestras por segundo).
-- Junto al CSV se genera automáticamente un archivo `<nombre>_formato.html` con los mismos
-  datos, con formato y colores, para inspección visual rápida.
 - Cada vez que se pausa o reanuda la adquisición con *Pausa/Reanuda*, se agrega una línea de
   comentario (`# Pausa en t=...` / `# Reanudado en t=...`) al CSV, para dejar constancia del
   hueco temporal en los datos.

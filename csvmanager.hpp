@@ -27,6 +27,8 @@ public:
 
     // Escritura de datos
     void saveData(const QStringList &newData, int dataPointNumber);
+    // Registra un evento de pausa/reanudación como línea de comentario en el CSV.
+    void logPauseEvent(bool paused);
 
     // Validación
     // Verifica que exista un mapeo de columnas/tramas listo para grabar.
@@ -41,8 +43,6 @@ signals:
 private:
     // Construye metadatos y cabecera de columnas del CSV.
     void buildHeaders();
-    // Construye la estructura base y cabecera de la tabla HTML paralela.
-    void buildHtmlHeaders();
 
     // Dependencia para traducir configuracion activa a mapeo de CSV.
     FpgaProtocol *m_fpgaProtocol = nullptr;
@@ -50,8 +50,6 @@ private:
     // Recursos de archivo de salida.
     QFile *m_csvFile = nullptr;
     QTextStream *m_csvStream = nullptr;
-    QFile *m_htmlFile = nullptr;
-    QTextStream *m_htmlStream = nullptr;
     int m_csvFlushCounter = 0;
 
     // Mapeo fijo de 8 columnas

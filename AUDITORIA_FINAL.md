@@ -1,7 +1,7 @@
 # Informe Final de Auditoría
 
 ## Alcance
-Auditoría estática y funcional del proyecto Serial Port Plotter, enfocada en seguridad operativa, estabilidad de UI, rendimiento de ploteo, dependencias/licencias y empaquetado.
+Auditoría estática y funcional del proyecto MPCC — Multi-Photon Coincidence Counter (CIOp), enfocada en seguridad operativa, estabilidad de UI, rendimiento de ploteo, dependencias/licencias y empaquetado.
 
 ## Resumen Ejecutivo
 La base del proyecto es funcional y conserva una arquitectura clara de captura serial, parseo, ploteo y persistencia. Los riesgos más relevantes encontrados estaban concentrados en tres zonas: escritura serial bloqueante, conversión numérica sin validación en el ploteo y una fuga de memoria en la ventana principal. También se detectó una incoherencia de versión entre la aplicación y el instalador.

@@ -1,6 +1,6 @@
-# Manual de Usuario - Serial Port Plotter v2.3.0
+# Manual de Usuario - MPCC — Multi-Photon Coincidence Counter (CIOp) v2.3.0
 
-Este manual describe cómo usar la versión `v2.3.0` de Serial Port Plotter. A continuación se listan los cambios y comportamientos relevantes introducidos en esta versión:
+Este manual describe cómo usar la versión `v2.3.0` de MPCC — Multi-Photon Coincidence Counter (CIOp). A continuación se listan los cambios y comportamientos relevantes introducidos en esta versión:
 
 - Escritura serie no bloqueante: la aplicación usa `QSerialPort::write()` para evitar esperas activas en el hilo de UI.
 - Validación de datos: valores no numéricos recibidos se ignoran durante el ploteo y se registran como advertencias.
@@ -121,6 +121,7 @@ La acción `Record stream` activa o desactiva la grabación del flujo entrante e
 - Cada muestra recibida se guarda junto con el índice real del punto del gráfico.
 - Si la grabación no puede abrirse, la acción se desactiva automáticamente.
 - Al desconectar o cerrar la sesión, el archivo se cierra.
+- Cada vez que se pausa o reanuda la adquisición con `Pausa/Reanuda`, se agrega una línea de comentario (`# Pausa en t=...` / `# Reanudado en t=...`) al CSV, para dejar constancia del hueco temporal en los datos.
 
 Nota: el encabezado y metadatos del CSV incluyen la versión de la aplicación (`v2.3.0`). El índice usado para cada fila corresponde al contador de muestras del ploteo (`dataPointCount`), que se sincroniza con lo mostrado en pantalla.
 

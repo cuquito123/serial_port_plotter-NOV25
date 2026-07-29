@@ -1,9 +1,9 @@
 /***************************************************************************
-**  This file is part of Serial Port Plotter                              **
+**  This file is part of MPCC — Multi-Photon Coincidence Counter (CIOp)   **
 **                                                                        **
 **                                                                        **
-**  Serial Port Plotter is a program for plotting integer data from       **
-**  serial port using Qt and QCustomPlot                                  **
+**  MPCC is a program for plotting integer data from serial port using    **
+**  Qt and QCustomPlot                                                    **
 **                                                                        **
 **  This program is free software: you can redistribute it and/or modify  **
 **  it under the terms of the GNU General Public License as published by  **
@@ -579,6 +579,13 @@ void MainWindow::updateExperimentTimeLabel()
                 // Pause acquisition
                 updateTimer.stop();
                 plotting = false;
+                // El estado debe cambiar ANTES de llamar a pauseExperimentTimer():
+                // esa función dispara internamente otro updateExperimentTimeLabel(),
+                // y si m_appState siguiera en Acquiring, este mismo bloque se
+                // volvería a ejecutar dentro de esa llamada anidada, entrando en
+                // una recursión infinita (stack overflow / crash) cada vez que
+                // totalMs siguiera siendo >= desiredMs.
+                setAppState(AppState::Paused);
                 pauseExperimentTimer();
                 cambiarEstado(finishedMsg, "blue");
                 // Stop recording and close CSV cleanly
@@ -597,7 +604,6 @@ void MainWindow::updateExperimentTimeLabel()
                     ui->statusBar->showMessage("Duración alcanzada: experimento finalizado");
                 }
                 cambiarEstado("EXPERIMENTO FINALIZADO (tiempo alcanzado)", "blue");
-                setAppState(AppState::Paused);
             }
         }
     }
@@ -698,7 +704,7 @@ void MainWindow::buildMenus()
     ui->actionEsconder_Caja_de_Texto->setText("Esconder Caja de Texto");
     ui->actionMostar_todos_los_datos->setText("Mostrar Todos los Datos");
     ui->actionPropiedades_de_Puerto->setText("Propiedades de Puerto...");
-    ui->actionconfig->setText("Volver a Configuración de Puerto");
+    ui->actionconfig->setText("Alternar Configuración / Gráfico");
     ui->actionconfig->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_Tab));
 
     ui->toolBar->clear();
@@ -709,7 +715,7 @@ void MainWindow::buildMenus()
     ui->toolBar_2->setVisible(false);
 
     auto *actionSalir = new QAction("Salir", this);
-    actionSalir->setShortcut(QKeySequence::Quit);
+    actionSalir->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_Q));
     connect(actionSalir, &QAction::triggered, this, &MainWindow::on_actionSalir_triggered);
 
     auto *actionAutoScaleY = new QAction("AutoScale en Y", this);
@@ -736,8 +742,6 @@ void MainWindow::buildMenus()
     ui->menuBar->clear();
 
     QMenu *menuPuertoSerial = ui->menuBar->addMenu("Puerto Serial");
-    menuPuertoSerial->addAction(ui->actionConnect);
-    menuPuertoSerial->addAction(ui->actionDisconnect);
     menuPuertoSerial->addAction(ui->actionPropiedades_de_Puerto);
     // Profile actions
     auto *actionSaveProfile = new QAction("Guardar Perfil...", this);
@@ -759,7 +763,9 @@ void MainWindow::buildMenus()
     menuVisualizacion->addAction(ui->actionEsconder_Caja_de_Texto);
     menuVisualizacion->addAction(ui->actionMostar_todos_los_datos);
     menuVisualizacion->addSeparator();
+    menuVisualizacion->addAction(ui->actionConnect);
     menuVisualizacion->addAction(ui->actionPause_Plot);
+    menuVisualizacion->addAction(ui->actionDisconnect);
     QMenu *menuControlesGrafico = menuVisualizacion->addMenu("Controles del Gráfico");
     menuControlesGrafico->addAction(actionAutoScaleY);
     menuControlesGrafico->addAction(ui->actionClear);
@@ -1243,7 +1249,7 @@ void MainWindow::on_actionPropiedades_de_grabacion_triggered()
     QLabel *summary = new QLabel(&dialog);
     summary->setWordWrap(true);
     summary->setText(
-        QString("La grabación CSV usa el mapeo activo y crea un archivo HTML paralelo.\n\nEstado actual: %1")
+        QString("La grabación CSV usa el mapeo activo.\n\nEstado actual: %1")
             .arg(ui->actionRecord_stream->isChecked() ? "grabación habilitada" : "grabación deshabilitada")
     );
     layout->addWidget(summary);
@@ -1287,8 +1293,8 @@ void MainWindow::on_actionAcerca_de_triggered()
 {
     QMessageBox::about(
         this,
-        "Acerca de Serial Port Plotter",
-        "Serial Port Plotter v2.3.0\n\nHerramienta para visualizar y registrar datos de puerto serie.\nDistribuido bajo GPLv3."
+        "Acerca de MPCC — Multi-Photon Coincidence Counter (CIOp)",
+        "MPCC — Multi-Photon Coincidence Counter (CIOp) v2.3.0\n\nHerramienta para visualizar y registrar datos de puerto serie.\nDistribuido bajo GPLv3."
     );
 }
 
@@ -1385,6 +1391,9 @@ void MainWindow::on_actionPause_Plot_triggered()
     if (m_appState == AppState::Paused || !plotting) {
                 // Resume acquisition
                 logEvent(EventType::Started, "Reanudando adquisición de datos");
+                if (m_csvManager) {
+                    m_csvManager->logPauseEvent(false);
+                }
         updateTimer.start(20);
                 plotting = true;
         ui->statusBar->showMessage("Plot reanudado. La adquisición y la grabación continúan.");
@@ -1397,6 +1406,9 @@ void MainWindow::on_actionPause_Plot_triggered()
         } else {
                 // Pause acquisition
                 logEvent(EventType::Stopped, "Pausando adquisición de datos");
+                if (m_csvManager) {
+                    m_csvManager->logPauseEvent(true);
+                }
                 updateTimer.stop();
                 plotting = false;
         ui->statusBar->showMessage("Plot pausado. Presiona 'Pausa/Reanuda' para continuar.");

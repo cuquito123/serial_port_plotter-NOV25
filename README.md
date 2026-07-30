@@ -94,7 +94,6 @@ Las transiciones se validan formalmente en `canTransitionToState()`, invocada de
 - **Telemetría de salud** (`HealthMetrics`): conteo de paquetes válidos, inválidos y perdidos, con advertencia a partir del 10 % de tramas inválidas sostenido y paso a estado `Fault` al 25 %.
 - **Registro de eventos** (`EventType`, `OperativeEvent`) con marca temporal y categorización por tipo (`PortOpened`, `PortClosed`, `Started`, `Stopped`, `ConfigApplied`, `Reset`, `Recovery`, `Error`), exportable con `exportEventLog()`.
 - **Recuperación ante fallos** (`ConnectionParams`): almacenamiento de los parámetros de la última conexión exitosa para reconexión automática.
-- **Ajuste adaptativo del gráfico:** reducción automática de 50 a 30 cuadros por segundo si el repintado consume más de la mitad del intervalo de refresco.
 
 ---
 

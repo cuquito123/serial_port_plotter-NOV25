@@ -44,7 +44,6 @@ namespace {
 constexpr double kInvalidPacketWarningRatio = 0.10;
 constexpr double kInvalidPacketFaultRatio = 0.25;
 constexpr qint64 kInvalidPacketSustainMs = 5000;
-constexpr double kReplotBudgetUsageThreshold = 0.50;
 
 struct CommunicationDegradationState {
     qint64 warningSinceMs = 0;
@@ -236,7 +235,6 @@ MainWindow::MainWindow (QWidget *parent) :
   connect(m_plotManager, &PlotManager::statusChanged, this, [this](const QString &msg) {
       ui->statusBar->showMessage(msg);
   });
-    connect(m_plotManager, &PlotManager::replotProfileWindow, this, &MainWindow::onReplotProfileWindow);
 
   m_csvManager = new CsvManager(m_fpgaProtocol, this);
   connect(m_csvManager, &CsvManager::statusChanged, this, [this](const QString &msg) {
@@ -765,7 +763,7 @@ void MainWindow::buildMenus()
     ui->actionEsconder_Caja_de_Texto->setText("Esconder Caja de Texto");
     ui->actionMostar_todos_los_datos->setText("Mostrar Todos los Datos");
     ui->actionPropiedades_de_Puerto->setText("Propiedades de Puerto...");
-    ui->actionconfig->setText("Alternar Configuración / Gráfico");
+    ui->actionconfig->setText("Panel de configuración");
     ui->actionconfig->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_Tab));
 
     ui->toolBar->clear();
@@ -793,10 +791,6 @@ void MainWindow::buildMenus()
 
     auto *actionAbout = new QAction("Acerca de...", this);
     connect(actionAbout, &QAction::triggered, this, &MainWindow::on_actionAcerca_de_triggered);
-
-    auto *actionConfigPanel = new QAction("Panel de configuración", this);
-    actionConfigPanel->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Tab));
-    connect(actionConfigPanel, &QAction::triggered, this, &MainWindow::on_actionconfig_triggered);
 
     // No conectar ui->actionPropiedades_de_Puerto ni ui->actionMostar_todos_los_datos
     // manualmente acá: setupUi() ya los conecta automáticamente a
@@ -827,8 +821,6 @@ void MainWindow::buildMenus()
     menuVisualizacion->addSeparator();
     menuVisualizacion->addAction(ui->actionEsconder_Caja_de_Texto);
     menuVisualizacion->addAction(ui->actionMostar_todos_los_datos);
-    menuVisualizacion->addSeparator();
-    menuVisualizacion->addAction(actionConfigPanel);
     menuVisualizacion->addSeparator();
     menuVisualizacion->addAction(ui->actionConnect);
     menuVisualizacion->addAction(ui->actionPause_Plot);
@@ -1019,37 +1011,6 @@ void MainWindow::replot()
 {
     if (m_plotManager) {
         m_plotManager->replot();
-    }
-}
-/** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
-
-void MainWindow::onReplotProfileWindow(double averageMs, double maxMs, int samples)
-{
-    if (samples <= 0) {
-        return;
-    }
-
-    const double budgetMs = static_cast<double>(m_plotUpdateIntervalMs) * kReplotBudgetUsageThreshold;
-    const double avgUsage = (averageMs / static_cast<double>(m_plotUpdateIntervalMs)) * 100.0;
-
-    qInfo().nospace()
-        << "[PERF][replot] samples=" << samples
-        << " avg_ms=" << QString::number(averageMs, 'f', 3)
-        << " max_ms=" << QString::number(maxMs, 'f', 3)
-        << " interval_ms=" << m_plotUpdateIntervalMs
-        << " usage_pct=" << QString::number(avgUsage, 'f', 1);
-
-    if (!m_replotThrottleApplied && averageMs > budgetMs) {
-        m_replotThrottleApplied = true;
-        m_plotUpdateIntervalMs = kPlotUpdateFallbackIntervalMs;
-        updateTimer.setInterval(m_plotUpdateIntervalMs);
-
-        const QString perfMsg = QString("Mitigación DEU-04: replot promedio %1 ms (> %2 ms). Refresco ajustado a %3 ms.")
-                                    .arg(QString::number(averageMs, 'f', 2))
-                                    .arg(QString::number(budgetMs, 'f', 2))
-                                    .arg(m_plotUpdateIntervalMs);
-        logEvent(EventType::ConfigApplied, perfMsg);
-        ui->statusBar->showMessage(perfMsg, 6000);
     }
 }
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
@@ -1448,7 +1409,7 @@ void MainWindow::on_actionPause_Plot_triggered()
                 if (m_csvManager) {
                     m_csvManager->logPauseEvent(false);
                 }
-        updateTimer.start(m_plotUpdateIntervalMs);
+        updateTimer.start(kPlotUpdateIntervalMs);
                 plotting = true;
         ui->statusBar->showMessage("Plot reanudado. La adquisición y la grabación continúan.");
                 // Dejar que setAppState/updateUIForState actualice el mensaje de estado.
@@ -1683,10 +1644,10 @@ void MainWindow::initActionsConnections()
 void MainWindow::on_EnviarDatos_clicked()
 {
     // El botón ya queda deshabilitado en este caso (ver updateUIForState), pero
-    // se valida también acá para no reenviar una configuración distinta a mitad
-    // de un CSV abierto, lo que dejaría filas mal etiquetadas sin registro alguno.
-    if (m_appState == AppState::Paused && m_csvManager && m_csvManager->isOpen()) {
-        ui->statusBar->showMessage("Detené la grabación antes de reconfigurar y reenviar datos.");
+    // se valida también acá: la pausa es solo pausa/reanuda, no una ventana
+    // para reconfigurar y reenviar a mitad de un ciclo.
+    if (m_appState == AppState::Paused) {
+        ui->statusBar->showMessage("Reanudá la adquisición ('Pausa/Reanuda') antes de reconfigurar y reenviar datos.");
         return;
     }
 
@@ -1763,7 +1724,7 @@ void MainWindow::on_EnviarDatos_clicked()
     // AHORA: Automáticamente inicia adquisición
     // ====================================================================
     logEvent(EventType::Started, "Iniciando adquisición de datos");
-    updateTimer.start(m_plotUpdateIntervalMs);
+    updateTimer.start(kPlotUpdateIntervalMs);
     plotting = true;
     ui->statusBar->showMessage("Adquisición iniciada. Presioná 'Pausa/Reanuda' para pausar.");
 
@@ -1775,6 +1736,14 @@ void MainWindow::on_EnviarDatos_clicked()
 }
 void MainWindow::on_ResetearDatos_clicked()
 {
+    // El botón ya queda deshabilitado en este caso (ver updateUIForState), pero
+    // se valida también acá por la misma razón que en EnviarDatos: la pausa es
+    // solo pausa/reanuda, no una ventana para resetear a mitad de un ciclo.
+    if (m_appState == AppState::Paused) {
+        ui->statusBar->showMessage("Reanudá la adquisición ('Pausa/Reanuda') antes de resetear.");
+        return;
+    }
+
     // Reinicia estado remoto y local: limpia interfaz y reenvia configuracion base.
     if (connected == true)
     {
@@ -2026,16 +1995,13 @@ void MainWindow::updateUIForState()
     const bool isPaused = (m_appState == AppState::Paused);
     const bool isFault = (m_appState == AppState::Fault);
 
-    // Con una grabación en curso, la pausa manual (no el fin natural por
-    // duración, que ya cierra el CSV antes de pasar a Paused) debe congelar
-    // también la configuración: si se permitiera cambiar la matriz/parámetros
-    // y reenviar con "Enviar Datos" a mitad de grabación, el CSV seguiría
-    // escribiendo filas con el mapeo de columnas viejo sin ningún registro
-    // del cambio, dejando el archivo mal etiquetado de forma silenciosa.
     const bool isRecording = (m_csvManager && m_csvManager->isOpen());
-    const bool isPausedWhileRecording = isPaused && isRecording;
 
-    const bool canConfigure = (isReadyForConfig || isReadyForExecution || (isPaused && !isRecording)) && !isFault;
+    // Pausa/Reanuda es solo eso: pausar o reanudar la adquisición y el
+    // guardado en curso. Ningún parámetro (matriz, selectores 1–8, tiempo,
+    // ancho de pulso, retardos) ni Enviar Datos/Reset se puede tocar mientras
+    // se está en pausa, haya o no grabación activa; primero hay que reanudar.
+    const bool canConfigure = (isReadyForConfig || isReadyForExecution) && !isFault;
 
     // Controles de puerto COM
     ui->comboPort->setEnabled(isDisconnected);
@@ -2073,10 +2039,24 @@ void MainWindow::updateUIForState()
     ui->Delay_B->setEnabled(canConfigure);
     ui->Delay_C->setEnabled(canConfigure);
     ui->Delay_D->setEnabled(canConfigure);
+    // La duración del experimento se lee recién al presionar Enviar Datos
+    // (selectedExperimentDurationMs()); si quedara editable durante la
+    // adquisición o la pausa, cambiarla no tendría ningún efecto hasta el
+    // próximo ciclo, dando la falsa impresión de que se aplicó al vuelo.
+    ui->ExperimentDurationNum->setEnabled(canConfigure);
+    ui->ExperimentDurationUnit->setEnabled(canConfigure);
 
     // Botones de envío/reset
-    ui->EnviarDatos->setEnabled(canConfigure);
-    ui->ResetearDatos->setEnabled(canConfigure && (isReadyForConfig || isPaused));
+    // Enviar Datos queda inhabilitado durante toda la pausa (haya o no
+    // grabación activa): reenviar configuración a mitad de un ciclo pausado
+    // reinicia la adquisición de forma confusa, así que el operador debe
+    // reanudar primero. Misma política que Reset.
+    ui->EnviarDatos->setEnabled(canConfigure && isReadyForConfig);
+    // Reset queda inhabilitado durante la pausa (haya o no grabación activa):
+    // resetear a mitad de un ciclo pausado invalida la adquisición en curso,
+    // así que el operador debe primero reanudar o reconfigurar, misma política
+    // que ya se aplica a Enviar Datos y Pausa/Reanuda.
+    ui->ResetearDatos->setEnabled(canConfigure && isReadyForConfig);
 
     // Grabación CSV
     // isReadyForExecution nunca se alcanza en la práctica (ningún setAppState()
@@ -2113,8 +2093,8 @@ void MainWindow::updateUIForState()
         if (m_experimentFinished) {
             stateMsg = "Experimento finalizado - Reconfigurá y presioná 'Enviar Datos' para un nuevo ciclo";
             color = "blue";
-        } else if (isPausedWhileRecording) {
-            stateMsg += " - Pausa activa. Grabación en curso: la configuración queda bloqueada hasta detener la grabación";
+        } else if (isRecording) {
+            stateMsg += " - Pausa activa (grabación en pausa), presioná 'Pausa/Reanuda' para continuar";
             color = "orange";
         } else {
             stateMsg += " - Pausa activa, presioná 'Pausa/Reanuda' para continuar";
@@ -2175,8 +2155,14 @@ void MainWindow::updatePendingChangesIndicator()
 {
     // Actualizar estilo y mensaje según estado de cambios pendientes
     if (m_hasPendingChanges) {
-        // Resaltar botón "Aplicar y Armar" en naranja para atraer atención
-        ui->EnviarDatos->setStyleSheet("background-color: rgb(255, 140, 0); color: white; font-weight: bold;");
+        // Resaltar botón "Aplicar y Armar" en naranja para atraer atención.
+        // La regla :disabled es necesaria porque un stylesheet con colores
+        // explícitos pisa la paleta gris que Qt aplica automáticamente a un
+        // botón deshabilitado (ej. durante la pausa): sin ella, el botón se
+        // veía "activo" en naranja aunque no respondiera a los clics.
+        ui->EnviarDatos->setStyleSheet(
+            "QPushButton { background-color: rgb(255, 140, 0); color: white; font-weight: bold; }"
+            "QPushButton:disabled { background-color: rgb(200, 200, 200); color: rgb(120, 120, 120); }");
         ui->statusBar->showMessage("⚠ Cambios pendientes de aplicar. Presioná 'Aplicar y Armar'.");
     } else {
         // Restaurar color normal del botón

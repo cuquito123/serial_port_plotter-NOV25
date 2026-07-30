@@ -63,8 +63,6 @@ public slots:
 signals:
     // Notifica mensajes de estado para mostrar en la barra principal.
     void statusChanged(const QString &message);
-    // Reporte periódico de costo de repintado para decisiones de rendimiento.
-    void replotProfileWindow(double averageMs, double maxMs, int samples);
 
 private:
     // Widgets controlados por este gestor (no son propietarios de memoria).
@@ -82,12 +80,6 @@ private:
 
     // Mapeo fijo de indice de trama por grafico, tomado al iniciar adquisicion.
     QVector<int> m_activeTramaIndices;
-
-    // Acumuladores de perfilado de repintado (ventana móvil por cantidad de muestras).
-    qint64 m_replotSamples = 0;
-    double m_replotAccumulatedMs = 0.0;
-    double m_replotMaxMs = 0.0;
-    int m_replotReportEvery = 100;
 };
 
 #endif // PLOTMANAGER_HPP

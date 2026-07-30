@@ -68,8 +68,7 @@ Si la aplicación ya estaba conectada, los cambios se aplican en la próxima rec
 
 ### 3.2. Abrir el puerto
 
-Mediante **Puerto Serial → Conectar**, el primer botón de la barra de herramientas, o la
-tecla multimedia *Reproducir*.
+Mediante **Puerto Serial → Conectar**, el primer botón de la barra de herramientas.
 
 Al conectar, la matriz de canales y la selección de columna se reinician por completo. La
 configuración del experimento se realiza siempre después de abrir el puerto; antes de
@@ -88,6 +87,7 @@ configuración que se transmite al FPGA.
 |---|---|
 | Verde | Canal habilitado |
 | Rojo | Canal deshabilitado |
+| Gris | Canal sin configurar, equivalente a canal deshabilitado |
 | Atenuado | El control no está disponible en el estado operativo actual |
 
 ### 4.2. Selectores de columna
@@ -95,31 +95,41 @@ configuración que se transmite al FPGA.
 La fila de botones numerados del 1 al 8, situada sobre la matriz, es un parámetro de testing
 para la FPGA: el botón presionado se transmite como parte de la trama de configuración, pero
 no afecta a los resultados del experimento ni interfiere en la representación gráfica o el
-guardado de datos.
+guardado de datos. Su disponibilidad sigue exactamente la de la matriz de canales (4.1):
+deshabilitados sin puerto conectado, durante la adquisición y durante toda la pausa, haya o
+no grabación activa.
 
 ### 4.3. Parámetros temporales
 
 | Control | Función |
 |---|---|
-| Unidad y valor de tiempo | Ventana de integración. Al cambiar la unidad, el valor se convierte automáticamente. El valor transmitido se ajusta hacia abajo al múltiplo de 8 de la unidad base que requiere el hardware (por ejemplo, 6 ms se transmite como 5,6 ms) |
+| Unidad y valor de tiempo | Ventana de integración. Al cambiar la unidad, el valor se convierte automáticamente. El valor transmitido se ajusta hacia abajo al múltiplo de 8 de la unidad base que requiere el hardware ( 1 unidad base = 100 uS) |
 | Ancho de Pulso | Ancho de los pulsos, en unidades del hardware. Rango: 0 a 255 |
 | Delay: Channel A–D | Retardo independiente por canal de entrada, en unidades del hardware. Rango: 0 a 255 |
 | Duración (exp) | Duración total del experimento; si es mayor que cero, exige grabación en CSV |
 
-El hardware admite ventanas de integración entre 5,6 ms y 99.999.999 unidades base.
+El hardware admite ventanas de integración entre 5,6 ms y 99.999.999 unidades base. El valor de 5.6 mS surge de valores experimentales.
+
+Igual que la matriz de canales, estos controles quedan deshabilitados sin puerto conectado,
+durante la adquisición y durante toda la pausa: `Pausa/Reanuda` solo pausa o reanuda la
+adquisición y el guardado en curso, no habilita reconfigurar nada.
 
 ### 4.4. Botón Reset
 
 El botón `Reset` reinicia el barrido en el FPGA y limpia la matriz y la configuración local.
-Después de usarlo hay que reconfigurar y presionar `Enviar Datos` para iniciar un nuevo
-ciclo.
+Queda inhabilitado durante toda la pausa, haya o no grabación activa, igual que `Enviar
+Datos`: resetear a mitad de un ciclo pausado invalidaría la adquisición en curso, así que
+primero hay que reanudar. Después de usarlo hay que reconfigurar y presionar `Enviar Datos`
+para iniciar un nuevo ciclo.
 
 ---
 
 ## 5. Aplicar la configuración
 
 Todo cambio pendiente se señala de dos formas: el botón `Enviar Datos` se resalta en naranja
-y la barra de estado avisa que hay cambios sin aplicar.
+y la barra de estado avisa que hay cambios sin aplicar. `Enviar Datos` solo está disponible en
+*Listo para configurar*; durante toda la pausa permanece gris e inutilizable —incluso si hay
+cambios pendientes, el resaltado naranja se suprime— hasta reanudar la adquisición.
 
 Al presionar `Enviar Datos`, la aplicación:
 
@@ -145,13 +155,12 @@ repetir.
 | Pausa/Reanuda | Detiene o retoma la adquisición sin cerrar el puerto | Pausa |
 | Desconectar | Cierra el puerto, detiene el cronómetro y cierra el CSV | Detener |
 
-Durante la pausa el puerto permanece abierto. Si no hay una grabación activa, los controles
-de configuración se habilitan y es posible reconfigurar y aplicar sin cerrar la conexión. Si
-en cambio hay un CSV abierto (grabación en curso), la configuración queda bloqueada mientras
-dura la pausa: cambiar la matriz o los parámetros y reenviar a mitad de una grabación dejaría
-filas con el mapeo de columnas viejo sin ningún registro del cambio, así que hay que detener
-la grabación (*Grabar Stream*) antes de poder reconfigurar. El cronómetro se detiene al
-pausar y retoma la cuenta al reanudar, con o sin grabación activa.
+`Pausa/Reanuda` es exclusivamente eso: pausa o retoma la adquisición y el guardado en curso,
+sin cerrar el puerto. No habilita ninguna otra acción. Durante toda la pausa —haya o no
+grabación activa— quedan bloqueados por igual la matriz de canales, los selectores 1–8, el
+tiempo de integración, el ancho de pulso, los retardos A–D, `Enviar Datos` y `Reset` (ver 7):
+para tocar cualquiera de ellos primero hay que reanudar. El cronómetro se detiene al pausar y
+retoma la cuenta al reanudar, con o sin grabación activa.
 
 Si se configuró una duración, al alcanzarla la aplicación finaliza el experimento
 automáticamente, cierra el CSV y lo informa. Para iniciar otro ciclo hay que reconfigurar y
@@ -178,16 +187,19 @@ presionar `Enviar Datos`; `Pausa/Reanuda` no reanuda un experimento finalizado.
 | Conectar | Sí | No | No | No |
 | Desconectar | No | Sí | Sí | Sí |
 | Pausa/Reanuda | No | No | Sí | Sí |
-| Matriz, columnas, tiempos, retardos | No | Sí | No | Sí, salvo con grabación activa |
-| Enviar Datos | No | Sí | No | Sí, salvo con grabación activa |
-| Reset | No | Sí | No | Sí, salvo con grabación activa |
+| Matriz de canales, selectores 1–8 | No | Sí | No | No |
+| Tiempo, ancho de pulso, retardos A–D | No | Sí | No | No |
+| Enviar Datos | No | Sí | No | No |
+| Reset | No | Sí | No | No |
 | Grabar Stream (CSV) | No | No | Sí | Sí |
 
 Los controles deshabilitados se muestran atenuados, de modo que su aspecto siempre coincide
-con su disponibilidad real. En *Pausado*, si hay una grabación en curso, la matriz, los
-parámetros, *Enviar Datos* y *Reset* quedan bloqueados hasta detener la grabación con *Grabar
-Stream*; esto no aplica al fin natural del experimento por duración, que ya cierra el CSV
-automáticamente antes de pasar a *Pausado*.
+con su disponibilidad real. En *Pausado* queda bloqueado todo el panel de configuración —
+matriz de canales, selectores 1–8, tiempo de integración, ancho de pulso, retardos A–D,
+*Enviar Datos* y *Reset*—, sin importar si hay grabación en curso: `Pausa/Reanuda` pausa y
+reanuda únicamente la adquisición y el guardado, no habilita reconfigurar nada. Para volver a
+tocar cualquiera de esos controles hay que reanudar primero (o, tras un fin natural del
+experimento por duración, reconfigurar desde cero con `Enviar Datos`).
 
 ---
 
@@ -209,10 +221,6 @@ oculta o lo vuelve a mostrar en el gráfico; `Reset All Visible` restablece todo
 diagnóstico. Se controla con *Mostrar Caja de Texto* y *Mostrar Todos los Datos*, en el menú
 Visualización.
 
-La aplicación mide continuamente el costo del repintado y, si supera la mitad del intervalo
-de refresco, reduce automáticamente la frecuencia de 50 a 30 cuadros por segundo y lo informa
-en la barra de estado. No requiere intervención.
-
 ---
 
 ## 9. Grabación y exportación
@@ -225,11 +233,11 @@ en la barra de estado. No requiere intervención.
 - Cada vez que se pausa o reanuda la adquisición con *Pausa/Reanuda*, se agrega una línea de
   comentario (`# Pausa en t=...` / `# Reanudado en t=...`) al CSV, para dejar constancia del
   hueco temporal en los datos.
-- Mientras haya una grabación en curso, pausar la adquisición bloquea la matriz, los
-  parámetros y *Enviar Datos*/*Reset*: no se puede reconfigurar y reenviar datos a mitad de
-  una grabación, porque el CSV ya abierto seguiría escribiendo filas con el mapeo de columnas
-  anterior sin dejar constancia del cambio. Para reconfigurar, primero hay que detener la
-  grabación con *Grabar Stream*.
+- Pausar la adquisición bloquea siempre todo el panel de configuración —matriz de canales,
+  selectores 1–8, tiempo de integración, ancho de pulso, retardos, *Enviar Datos* y
+  *Reset*—, haya o no grabación activa: `Pausa/Reanuda` solo pausa y reanuda la adquisición y
+  el guardado, nunca habilita reconfigurar. Para tocar cualquiera de esos controles hay que
+  reanudar primero.
 - Si la grabación no puede abrirse, la acción se desactiva automáticamente. Al desconectar o
   cerrar la sesión, el archivo se cierra.
 - **Propiedades de grabación…**: informa el estado actual y ofrece acceso a la carpeta de
@@ -324,7 +332,8 @@ los datos registrados.
 
 | Síntoma | Causa probable | Solución |
 |---|---|---|
-| La matriz se ve atenuada y no responde | El puerto no fue abierto, hay una adquisición en curso, o está pausado con una grabación activa | Conectar el puerto; presionar Pausa; o detener la grabación (*Grabar Stream*) antes de reconfigurar |
+| El panel de configuración (matriz, selectores 1–8, tiempo, duración del experimento, ancho de pulso, retardos) se ve atenuado y no responde | Solo es editable en *Listo para configurar*: se bloquea si el puerto no fue abierto, si hay una adquisición en curso, si está en pausa (siempre, haya o no grabación activa) o si la aplicación está en *Falla* | Conectar el puerto; presionar `Pausa/Reanuda` para reanudar; o desconectar y corregir si está en Falla |
+| `Enviar Datos` (o `Reset`) se ve gris aunque haya cambios pendientes | Solo están habilitados en *Listo para configurar*. Fuera de ese estado —desconectado, adquiriendo, pausado o en falla— quedan grises y el resaltado naranja de cambios pendientes se suprime; esto puede pasar incluso sin haber pausado nunca, por ejemplo al cargar un perfil (*Cargar Perfil…*) antes de conectar el puerto | Conectar el puerto y/o presionar `Pausa/Reanuda` para volver a *Listo para configurar* |
 | Advertencia naranja o roja de tramas inválidas | Comunicación degradada por cableado, ruido o parámetros de puerto | Revisar la conexión y los parámetros. Si llegó a rojo, desconectar, corregir y reconectar |
 | La aplicación pasó a Falla al presionar `Enviar Datos` | El control previo detectó una condición inválida | Leer el motivo en la barra de estado, desconectar, corregir y repetir |
 | No aparece el puerto de la placa | Placa desconectada o driver USB-serie ausente | Verificar la conexión física y el puerto COM asignado |

@@ -2059,10 +2059,10 @@ void MainWindow::updateUIForState()
     ui->ResetearDatos->setEnabled(canConfigure && isReadyForConfig);
 
     // Grabación CSV
-    // isReadyForExecution nunca se alcanza en la práctica (ningún setAppState()
-    // transiciona a ese estado), así que sin isReadyForConfig esta acción
-    // quedaba deshabilitada todo el tiempo entre conectar el puerto y arrancar
-    // la adquisición, que es justo cuando el usuario intenta armar la grabación.
+    // isReadyForExecution es el estado transitorio entre enviar la configuración
+    // al FPGA (setAppState en on_EnviarDatos_clicked) y pasar a Acquiring apenas
+    // arranca la adquisición; sin incluirlo acá, actionRecord_stream quedaría
+    // deshabilitado justo en el instante en que el usuario intenta armar la grabación.
     const bool canRecord = isReadyForConfig || isReadyForExecution || isAcquiring || isPaused;
     ui->actionRecord_stream->setEnabled(canRecord);
 
@@ -2155,7 +2155,7 @@ void MainWindow::updatePendingChangesIndicator()
 {
     // Actualizar estilo y mensaje según estado de cambios pendientes
     if (m_hasPendingChanges) {
-        // Resaltar botón "Aplicar y Armar" en naranja para atraer atención.
+        // Resaltar botón "Enviar Datos" en naranja para atraer atención.
         // La regla :disabled es necesaria porque un stylesheet con colores
         // explícitos pisa la paleta gris que Qt aplica automáticamente a un
         // botón deshabilitado (ej. durante la pausa): sin ella, el botón se
@@ -2163,7 +2163,7 @@ void MainWindow::updatePendingChangesIndicator()
         ui->EnviarDatos->setStyleSheet(
             "QPushButton { background-color: rgb(255, 140, 0); color: white; font-weight: bold; }"
             "QPushButton:disabled { background-color: rgb(200, 200, 200); color: rgb(120, 120, 120); }");
-        ui->statusBar->showMessage("⚠ Cambios pendientes de aplicar. Presioná 'Aplicar y Armar'.");
+        ui->statusBar->showMessage("⚠ Cambios pendientes de aplicar. Presioná 'Enviar Datos'.");
     } else {
         // Restaurar color normal del botón
         ui->EnviarDatos->setStyleSheet("");

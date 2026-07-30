@@ -62,9 +62,9 @@ La base de código original consistía en una clase `MainWindow` monolítica que
 | Módulo | Responsabilidad |
 |---|---|
 | `SerialPortManager` | Comunicación serie: apertura, cierre, lectura asíncrona y escritura no bloqueante |
-| `SerialMessageParser` | Parseo por máquina de estados del protocolo `$…;`, con validación carácter a carácter y descarte de tramas inválidas |
+| `SerialMessageParser` | Parseo por máquina de estados del protocolo `$…;`: descarta en silencio los caracteres no válidos dentro de una trama, carácter a carácter. No evalúa ni descarta tramas completas — esa clasificación válida/inválida para la telemetría de salud ocurre en `MainWindow` |
 | `FpgaProtocol` | Construcción de paquetes, conversión y normalización de tiempos, etiquetas y mapeo de trama |
-| `PlotManager` | Visualización en tiempo real sobre QCustomPlot, con throttling adaptativo (50 → 30 fps) |
+| `PlotManager` | Visualización en tiempo real sobre QCustomPlot |
 | `CsvManager` | Exportación a CSV con metadatos, más un archivo HTML de formato paralelo |
 | `ProfileManager` | Persistencia de perfiles de experimento en formato JSON |
 
@@ -185,7 +185,7 @@ Ejemplo de emisión desde el dispositivo:
 printf("$%d %d;", dato1, dato2);
 ```
 
-Se admiten enteros y decimales, positivos y negativos. El parser valida carácter a carácter y descarta las tramas que no cumplen el formato, contabilizándolas para la telemetría de salud.
+Se admiten enteros y decimales, positivos y negativos. El parser descarta en silencio los caracteres no válidos dentro de una trama, carácter a carácter. Las tramas con campos vacíos o no numéricos se contabilizan como inválidas en la telemetría de salud, pero no se descartan: los campos numéricos que sobreviven igual llegan al gráfico y al CSV, por lo que ante advertencias de tramas inválidas conviene revisar los datos registrados.
 
 ### Salida CSV
 
@@ -193,7 +193,7 @@ Cada archivo lleva un encabezado con los metadatos del experimento, incluida la 
 
 Cuando la duración de experimento configurada es mayor que cero, la grabación es obligatoria: la aplicación no inicia la adquisición sin un CSV abierto.
 
-El mapeo de columnas del CSV se fija al abrir el archivo (`CsvManager::openCsvFile()`) y no se actualiza mientras esté abierto. Por eso, mientras haya una grabación en curso, `updateUIForState()` bloquea la reconfiguración durante la pausa (matriz, parámetros y "Enviar Datos"): permitirla escribiría filas con el mapeo viejo después de un cambio de configuración, sin ningún registro del cambio en el archivo.
+El mapeo de columnas del CSV se fija al abrir el archivo (`CsvManager::openCsvFile()`) y no se actualiza mientras esté abierto. `Pausa/Reanuda` solo pausa y reanuda la adquisición y el guardado en curso, sin habilitar ninguna reconfiguración: `updateUIForState()` bloquea todo el panel (matriz, selectores, tiempo, ancho de pulso, retardos, "Enviar Datos" y "Reset") durante toda la pausa, haya o no grabación activa, así que nunca se reenvía una configuración con un mapeo de columnas distinto al que ya quedó escrito en el CSV abierto.
 
 ### Perfiles
 
@@ -210,7 +210,7 @@ API estática de `ProfileManager`: `profilesDirectory()`, `profileNames()`, `pro
 3. *Puerto Serial → Conectar*. La aplicación pasa a **Listo para configurar** y reinicia la matriz de canales.
 4. Configurar la matriz, la columna a graficar y los parámetros temporales.
 5. **Enviar Datos**: ejecuta el control previo, abre el CSV si corresponde, transmite la configuración al FPGA e inicia la adquisición.
-6. *Pausa/Reanuda* detiene la adquisición sin cerrar el puerto y rehabilita los controles de configuración, salvo que haya una grabación en curso: en ese caso la configuración queda bloqueada hasta detener la grabación, para no reenviar datos con un mapeo de columnas distinto al que ya quedó escrito en el CSV abierto.
+6. *Pausa/Reanuda* pausa o reanuda exclusivamente la adquisición y el guardado en curso, sin cerrar el puerto; no habilita ninguna reconfiguración. La matriz, los selectores, los parámetros temporales, *Enviar Datos* y *Reset* quedan bloqueados durante toda la pausa, haya o no grabación activa.
 7. *Desconectar* cierra el puerto, detiene el cronómetro y cierra el archivo CSV.
 
 ### Atajos

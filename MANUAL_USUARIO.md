@@ -174,7 +174,6 @@ presionar `Enviar Datos`; `Pausa/Reanuda` no reanuda un experimento finalizado.
 |---|---|
 | Desconectado | Al iniciar y después de cerrar el puerto |
 | Listo para configurar | Inmediatamente después de abrir el puerto |
-| Listo para ejecutar | Instante entre transmitir la configuración e iniciar la adquisición (transitorio) |
 | Adquiriendo | Mientras se reciben datos |
 | Pausado | Al presionar Pausa, o al finalizar el experimento por duración |
 | Falla | Control previo fallido, o degradación severa de la comunicación |

@@ -81,9 +81,9 @@ FPGA → SerialPortManager → SerialMessageParser → MainWindow → PlotManage
 `MainWindow` gobierna la disponibilidad de los controles mediante un estado operativo explícito (`enum class AppState`, definido en `mainwindow.hpp`):
 
 ```
-Disconnected → ReadyForConfiguration → ReadyForExecution → Acquiring ⇄ Paused
-                                                                   ↓
-                                                                 Fault
+Disconnected → ReadyForConfiguration → Acquiring ⇄ Paused
+                                             ↓
+                                           Fault
 ```
 
 Las transiciones se validan formalmente en `canTransitionToState()`, invocada desde `setAppState()`: cualquier cambio de estado no contemplado en el flujo operativo es rechazado y registrado. El estado `Fault` se alcanza cuando el control previo detecta una condición inválida o cuando la proporción de tramas inválidas supera el 25 % sostenido; se sale de él desconectando. `updateUIForState()` y `getStateDisplayName()` completan el gobierno del estado sobre la UI.

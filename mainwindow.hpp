@@ -41,7 +41,6 @@
 enum class AppState {
     Disconnected,             // Desconectado: puerto cerrado, sin comunicación
     ReadyForConfiguration,    // Listo para configurar: puerto abierto, sin adquisición
-    ReadyForExecution,        // Listo para ejecutar: config enviada al FPGA, sin adquisición aún
     Acquiring,                // Adquiriendo: toma de datos activa
     Paused,                   // Pausado: comunicación detenida durante adquisición
     Fault                     // Falla: error detectado, requiere recuperación

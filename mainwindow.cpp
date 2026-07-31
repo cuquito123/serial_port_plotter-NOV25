@@ -1737,9 +1737,6 @@ void MainWindow::on_EnviarDatos_clicked()
     // Limpiar indicador de cambios pendientes
     clearPendingChanges();
 
-    // Estado intermedio: la configuración ya quedó aplicada al FPGA y el ciclo todavía no empezó a recibir datos.
-    setAppState(AppState::ReadyForExecution);
-
     // ====================================================================
     // AHORA: Automáticamente inicia adquisición
     // ====================================================================
@@ -1993,8 +1990,6 @@ QString MainWindow::getStateDisplayName(AppState state) const
         return "Desconectado";
     case AppState::ReadyForConfiguration:
         return "Listo para configurar";
-    case AppState::ReadyForExecution:
-        return "Listo para ejecutar";
     case AppState::Acquiring:
         return "Adquiriendo";
     case AppState::Paused:
@@ -2010,7 +2005,6 @@ void MainWindow::updateUIForState()
 {
     const bool isDisconnected = (m_appState == AppState::Disconnected);
     const bool isReadyForConfig = (m_appState == AppState::ReadyForConfiguration);
-    const bool isReadyForExecution = (m_appState == AppState::ReadyForExecution);
     const bool isAcquiring = (m_appState == AppState::Acquiring);
     const bool isPaused = (m_appState == AppState::Paused);
     const bool isFault = (m_appState == AppState::Fault);
@@ -2021,7 +2015,7 @@ void MainWindow::updateUIForState()
     // guardado en curso. Ningún parámetro (matriz, selectores 1–8, tiempo,
     // ancho de pulso, retardos) ni Enviar Datos/Reset se puede tocar mientras
     // se está en pausa, haya o no grabación activa; primero hay que reanudar.
-    const bool canConfigure = (isReadyForConfig || isReadyForExecution) && !isFault;
+    const bool canConfigure = isReadyForConfig && !isFault;
 
     // Controles de puerto COM
     ui->comboPort->setEnabled(isDisconnected);
@@ -2071,19 +2065,15 @@ void MainWindow::updateUIForState()
     // grabación activa): reenviar configuración a mitad de un ciclo pausado
     // reinicia la adquisición de forma confusa, así que el operador debe
     // reanudar primero. Misma política que Reset.
-    ui->EnviarDatos->setEnabled(canConfigure && isReadyForConfig);
+    ui->EnviarDatos->setEnabled(canConfigure);
     // Reset queda inhabilitado durante la pausa (haya o no grabación activa):
     // resetear a mitad de un ciclo pausado invalida la adquisición en curso,
     // así que el operador debe primero reanudar o reconfigurar, misma política
     // que ya se aplica a Enviar Datos y Pausa/Reanuda.
-    ui->ResetearDatos->setEnabled(canConfigure && isReadyForConfig);
+    ui->ResetearDatos->setEnabled(canConfigure);
 
     // Grabación CSV
-    // isReadyForExecution es el estado transitorio entre enviar la configuración
-    // al FPGA (setAppState en on_EnviarDatos_clicked) y pasar a Acquiring apenas
-    // arranca la adquisición; sin incluirlo acá, actionRecord_stream quedaría
-    // deshabilitado justo en el instante en que el usuario intenta armar la grabación.
-    const bool canRecord = isReadyForConfig || isReadyForExecution || isAcquiring || isPaused;
+    const bool canRecord = isReadyForConfig || isAcquiring || isPaused;
     ui->actionRecord_stream->setEnabled(canRecord);
 
     // Actualizar mensaje de estado
@@ -2098,10 +2088,6 @@ void MainWindow::updateUIForState()
     case AppState::ReadyForConfiguration:
         stateMsg += " - Presioná 'Enviar Datos' para iniciar";
         color = "blue";
-        break;
-    case AppState::ReadyForExecution:
-        stateMsg += " - Configuración aplicada, listo para un nuevo ciclo";
-        color = "green";
         break;
     case AppState::Acquiring:
         stateMsg += isRecording ? " - Adquisición y guardado en curso" : " - Adquisición en curso";
@@ -2137,13 +2123,11 @@ bool MainWindow::canTransitionToState(AppState newState) const
     case AppState::Disconnected:
         return (newState == AppState::ReadyForConfiguration || newState == AppState::Fault);
     case AppState::ReadyForConfiguration:
-        return (newState == AppState::ReadyForExecution || newState == AppState::Disconnected || newState == AppState::Fault);
-    case AppState::ReadyForExecution:
-        return (newState == AppState::Acquiring || newState == AppState::ReadyForConfiguration || newState == AppState::Disconnected || newState == AppState::Fault);
+        return (newState == AppState::Acquiring || newState == AppState::Disconnected || newState == AppState::Fault);
     case AppState::Acquiring:
         return (newState == AppState::Paused || newState == AppState::Disconnected || newState == AppState::Fault);
     case AppState::Paused:
-        return (newState == AppState::Acquiring || newState == AppState::ReadyForConfiguration || newState == AppState::ReadyForExecution || newState == AppState::Disconnected || newState == AppState::Fault);
+        return (newState == AppState::Acquiring || newState == AppState::ReadyForConfiguration || newState == AppState::Disconnected || newState == AppState::Fault);
     case AppState::Fault:
         return (newState == AppState::Disconnected);
     default:

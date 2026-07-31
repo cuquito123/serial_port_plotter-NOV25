@@ -7,7 +7,7 @@ echo.
 echo 1. Defining variables
 echo    ~~~~~~~~~~~~~~~~~~
 set deps_folder=.\build\installer\deps
-set exe_path=.\build\release\serial_port_plotter.exe
+set exe_path=.\build\release\MPCC_CIOp.exe
 echo    Dependencies folder = %deps_folder%
 echo    Main EXE path = %exe_path%
 echo.

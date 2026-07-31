@@ -5,7 +5,7 @@
 #define MyAppVersion "3.0.0"
 #define MyAppPublisher "CIOp"
 #define MyAppURL ""
-#define MyAppExeName "serial_port_plotter.exe"
+#define MyAppExeName "MPCC_CIOp.exe"
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application.

@@ -11,7 +11,7 @@ CONFIG += c++11
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets printsupport
 
-TARGET = serial_port_plotter
+TARGET = MPCC_CIOp
 TEMPLATE = app
 
 SOURCES += main.cpp\

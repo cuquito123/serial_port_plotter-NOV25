@@ -12,7 +12,7 @@
 #define VER_LEGALCOPYRIGHT_STR      "Copyright © 2017 Borislav K."
 #define VER_LEGALTRADEMARKS1_STR    "All Rights Reserved"
 #define VER_LEGALTRADEMARKS2_STR    VER_LEGALTRADEMARKS1_STR
-#define VER_ORIGINALFILENAME_STR    "serial_port_plotter.exe"
+#define VER_ORIGINALFILENAME_STR    "MPCC_CIOp.exe"
 #define VER_PRODUCTNAME_STR         "MPCC - Multi-Photon Coincidence Counter (CIOp)"
 
 #define VER_COMPANYDOMAIN_STR       ""

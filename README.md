@@ -117,13 +117,11 @@ Desde la consola *Qt 5.12.2 (MinGW 7.3.0 32-bit)*, que trae el `PATH` ya configu
 cd /d <ruta-del-proyecto>
 mkdir build-release
 cd build-release
-qmake ..\SerialPortPlotter.pro "CONFIG+=release"
+qmake ..\MPCC_CIOp.pro "CONFIG+=release"
 mingw32-make -j4
 ```
 
-El ejecutable resultante es `build-release\release\serial_port_plotter.exe`.
-
-> El nombre del ejecutable (`serial_port_plotter.exe`) no coincide con el del archivo de proyecto (`SerialPortPlotter.pro`).
+El ejecutable resultante es `build-release\release\MPCC_CIOp.exe`.
 
 Para recompilar tras cambios en el código alcanza con `mingw32-make -j4`. Sólo hay que volver a ejecutar `qmake` si se modifica el `.pro` o se agregan archivos nuevos.
 
@@ -133,8 +131,8 @@ Carpeta portable con las dependencias de Qt y del runtime de MinGW (comandos eje
 
 ```cmd
 mkdir C:\deploy
-copy release\serial_port_plotter.exe C:\deploy
-windeployqt --release C:\deploy\serial_port_plotter.exe
+copy release\MPCC_CIOp.exe C:\deploy
+windeployqt --release C:\deploy\MPCC_CIOp.exe
 copy C:\Qt\Qt5.12.2\Tools\mingw730_32\bin\libgcc_s_dw2-1.dll C:\deploy
 copy C:\Qt\Qt5.12.2\Tools\mingw730_32\bin\libstdc++-6.dll C:\deploy
 copy C:\Qt\Qt5.12.2\Tools\mingw730_32\bin\libwinpthread-1.dll C:\deploy
@@ -156,7 +154,7 @@ El instalador de Windows se genera con Inno Setup a partir de `installer.iss`, q
 El repositorio incluye `inyector3.py`, un simulador de tramas de FPGA escrito en Python con `pyserial`. Combinado con un par de puertos COM virtuales (com0com), permite verificar la aplicación sin depender del hardware:
 
 ```
-inyector3.py → puerto virtual A ↔ puerto virtual B → serial_port_plotter.exe
+inyector3.py → puerto virtual A ↔ puerto virtual B → MPCC_CIOp.exe
 ```
 
 El inyector genera tramas con el formato del protocolo a 20 Hz, modelando cada canal físico como una onda cuadrada con frecuencia, ciclo de trabajo y fase configurables. Las columnas de coincidencia cuentan las muestras internas en que todos los canales de esa combinación estuvieron simultáneamente en nivel alto, de modo que el resultado esperado es predecible analíticamente antes de correr la prueba.
@@ -228,7 +226,7 @@ API estática de `ProfileManager`: `profilesDirectory()`, `profileNames()`, `pro
 ## Estructura del repositorio
 
 ```
-SerialPortPlotter.pro         Archivo de proyecto qmake
+MPCC_CIOp.pro                 Archivo de proyecto qmake
 main.cpp                      Punto de entrada
 mainwindow.{hpp,cpp,ui}       Ventana principal y máquina de estados
 helpwindow.{hpp,cpp,ui}       Ventana de ayuda / manual embebido

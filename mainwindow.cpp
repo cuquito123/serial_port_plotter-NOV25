@@ -272,6 +272,13 @@ MainWindow::MainWindow (QWidget *parent) :
     m_experimentUpdateTimer.setParent(this);
     m_experimentUpdateTimer.setInterval(500);
     connect(&m_experimentUpdateTimer, &QTimer::timeout, this, &MainWindow::updateExperimentTimeLabel);
+    // Sin esto, cambiar la duración mientras no se está adquiriendo (ej. antes de
+    // arrancar, con la grabación armada) no se reflejaba en "Restante" hasta el
+    // próximo evento que la tocara a mano (armar grabación, iniciar, etc.).
+    connect(ui->ExperimentDurationNum, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &MainWindow::updateExperimentTimeLabel);
+    connect(ui->ExperimentDurationUnit, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &MainWindow::updateExperimentTimeLabel);
       columnaSeleccionada = 0;
 
       botonesGraf << ui->GRAF_1 << ui->GRAF_2 << ui->GRAF_3 << ui->GRAF_4
@@ -587,6 +594,10 @@ void MainWindow::resetExperimentTimer()
     if (experimentTimeLabel) {
         experimentTimeLabel->setText("Exp: 00:00:00");
     }
+    // Recalcula "Restante" con el estado y la duración configurada actuales:
+    // sin esto, quedaba mostrando el valor de la corrida anterior (ej. "Finalizado: ...")
+    // hasta el próximo tick del timer, que solo corre mientras se está adquiriendo.
+    updateExperimentTimeLabel();
 }
 
 void MainWindow::updateExperimentTimeLabel()
@@ -1305,11 +1316,20 @@ void MainWindow::on_actionManual_de_Usuario_triggered()
 
 void MainWindow::on_actionAcerca_de_triggered()
 {
-    QMessageBox::about(
-        this,
-        "Acerca de MPCC — Multi-Photon Coincidence Counter (CIOp)",
-        "MPCC — Multi-Photon Coincidence Counter (CIOp) v2.3.0\n\nHerramienta para visualizar y registrar datos de puerto serie.\nDistribuido bajo GPLv3."
-    );
+    const QString candidatePaths[] = {
+        QDir::current().filePath("README.md"),
+        QDir(QCoreApplication::applicationDirPath()).filePath("../README.md"),
+        QDir(QCoreApplication::applicationDirPath()).filePath("README.md")
+    };
+
+    for (const QString &path : candidatePaths) {
+        if (QFileInfo(path).exists()) {
+            QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(path).absoluteFilePath()));
+            return;
+        }
+    }
+
+    QMessageBox::warning(this, "Acerca de", "No se encontró README.md en el entorno actual.");
 }
 
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */

@@ -6,7 +6,7 @@ El detector está implementado sobre una placa **FPGA DE0 Nano SoC** (Altera/Int
 
 Desarrollada en **C++ con el framework Qt**, la aplicación configura el experimento, transmite los parámetros al FPGA, grafica los conteos en tiempo real y registra la adquisición en disco para su procesamiento estadístico posterior.
 
-**Versión actual:** 2.3.0
+**Versión actual:** 3.0.0
 
 ## Captura de pantalla
 
@@ -29,7 +29,7 @@ El desarrollo se realizó en el marco de una **Práctica Profesional Supervisada
 - Ajuste de ancho de pulso y retardos independientes para los cuatro canales de entrada.
 - Definición de la ventana temporal de integración y de la duración total del experimento.
 - Visualización en tiempo real de conteos individuales y en coincidencia (QCustomPlot).
-- Grabación en CSV con metadatos de experimento, más un HTML paralelo con formato.
+- Grabación en CSV con metadatos de experimento.
 - Perfiles de experimento persistidos en JSON.
 - Supervisión de la salud de la comunicación y control previo a la ejecución.
 
@@ -65,7 +65,7 @@ La base de código original consistía en una clase `MainWindow` monolítica que
 | `SerialMessageParser` | Parseo por máquina de estados del protocolo `$…;`: descarta en silencio los caracteres no válidos dentro de una trama, carácter a carácter. No evalúa ni descarta tramas completas — esa clasificación válida/inválida para la telemetría de salud ocurre en `MainWindow` |
 | `FpgaProtocol` | Construcción de paquetes, conversión y normalización de tiempos, etiquetas y mapeo de trama |
 | `PlotManager` | Visualización en tiempo real sobre QCustomPlot |
-| `CsvManager` | Exportación a CSV con metadatos, más un archivo HTML de formato paralelo |
+| `CsvManager` | Exportación a CSV con metadatos |
 | `ProfileManager` | Persistencia de perfiles de experimento en formato JSON |
 
 `MainWindow` quedó como **coordinador**: instancia los módulos, los conecta mediante señales y slots (recepción cruda → parseo → nueva data → ploteo → guardado), y gobierna la máquina de estados de la aplicación.
@@ -189,7 +189,7 @@ Se admiten enteros y decimales, positivos y negativos. El parser descarta en sil
 
 ### Salida CSV
 
-Cada archivo lleva un encabezado con los metadatos del experimento, incluida la versión de la aplicación. La primera columna es el **tiempo en segundos**. Junto al CSV se genera automáticamente un archivo `<nombre>_formato.html` con los mismos datos formateados, para inspección visual rápida.
+Cada archivo lleva un encabezado con los metadatos del experimento, incluida la versión de la aplicación. La primera columna es el **tiempo en segundos**.
 
 Cuando la duración de experimento configurada es mayor que cero, la grabación es obligatoria: la aplicación no inicia la adquisición sin un CSV abierto.
 
@@ -236,7 +236,7 @@ serialportmanager.{hpp,cpp}   Comunicación serie
 serialmessageparser.{hpp,cpp} Parseo del protocolo $…;
 fpgaprotocol.{hpp,cpp}        Construcción de paquetes y conversiones
 plotmanager.{hpp,cpp}         Visualización en tiempo real
-csvmanager.{hpp,cpp}          Exportación CSV + HTML
+csvmanager.{hpp,cpp}          Exportación CSV
 profilemanager.{hpp,cpp}      Perfiles JSON
 qcustomplot/                  Biblioteca de graficado (third-party)
 installer.iss                 Script de Inno Setup

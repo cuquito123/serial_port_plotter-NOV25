@@ -37,8 +37,8 @@ El riesgo residual más importante sigue siendo el repintado del gráfico bajo c
 - **Severidad:** Baja
 - **Evidencia:** La ventana principal mostraba `v2.3.0`, mientras `installer.iss` aún declaraba una versión anterior.
 - **Impacto:** Confusión en distribución, soporte y trazabilidad de artefactos.
-- **Estado:** Corregido.
-- **Verificación:** `installer.iss:5` — `MyAppVersion` está definido como `"2.3.0"`, consistente con la aplicación.
+- **Estado:** Corregido, pero volvió a desviarse: al subir la app a `v3.0.0` (`main.cpp:47`), `installer.iss` y los recursos de versión de Windows (`res/serial_port_plotter.rc`, `res/res1/serial_port_plotter.rc`) quedaron atrás en `2.3.0`. Se corrigió nuevamente en esta revisión, y de paso se quitó el publisher/URL heredado del repositorio upstream (`CieNTi`), que ya no aplica a este fork.
+- **Verificación:** `installer.iss:5` — `MyAppVersion` es `"3.0.0"`; `res/serial_port_plotter.rc:3-7` y `res/res1/serial_port_plotter.rc:3-7` — `VER_FILEVERSION`/`VER_PRODUCTVERSION` en `3,0,0,0`/`"3.0.0"`, consistentes con la aplicación.
 
 ## Hallazgos incorporados en esta revisión
 

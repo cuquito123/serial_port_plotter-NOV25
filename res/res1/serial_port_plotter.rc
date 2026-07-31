@@ -1,10 +1,10 @@
 #include <windows.h>
 
-#define VER_FILEVERSION             2,3,0,0
-#define VER_FILEVERSION_STR         "2.3.0.0\0"
+#define VER_FILEVERSION             3,0,0,0
+#define VER_FILEVERSION_STR         "3.0.0.0\0"
 
-#define VER_PRODUCTVERSION          2,3,0,0
-#define VER_PRODUCTVERSION_STR      "2.3.0\0"
+#define VER_PRODUCTVERSION          3,0,0,0
+#define VER_PRODUCTVERSION_STR      "3.0.0\0"
 
 #define VER_COMPANYNAME_STR         "No Company"
 #define VER_FILEDESCRIPTION_STR     "MPCC - Multi-Photon Coincidence Counter (CIOp)"
@@ -15,7 +15,7 @@
 #define VER_ORIGINALFILENAME_STR    "serial_port_plotter.exe"
 #define VER_PRODUCTNAME_STR         "MPCC - Multi-Photon Coincidence Counter (CIOp)"
 
-#define VER_COMPANYDOMAIN_STR       "github.com/CieNTi/serial_port_plotter"
+#define VER_COMPANYDOMAIN_STR       ""
 
 #ifndef DEBUG
 #define VER_DEBUG 0

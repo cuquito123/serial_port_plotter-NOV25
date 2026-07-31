@@ -2,9 +2,9 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "MPCC - Multi-Photon Coincidence Counter (CIOp)"
-#define MyAppVersion "2.3.0"
-#define MyAppPublisher "CieNTi"
-#define MyAppURL "https://github.com/CieNTi/serial_port_plotter"
+#define MyAppVersion "3.0.0"
+#define MyAppPublisher "CIOp"
+#define MyAppURL ""
 #define MyAppExeName "serial_port_plotter.exe"
 
 [Setup]

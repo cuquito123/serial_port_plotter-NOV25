@@ -1316,20 +1316,44 @@ void MainWindow::on_actionManual_de_Usuario_triggered()
 
 void MainWindow::on_actionAcerca_de_triggered()
 {
-    const QString candidatePaths[] = {
-        QDir::current().filePath("README.md"),
-        QDir(QCoreApplication::applicationDirPath()).filePath("../README.md"),
-        QDir(QCoreApplication::applicationDirPath()).filePath("README.md")
-    };
+    QDialog dialog(this);
+    dialog.setWindowTitle("Acerca de MPCC — Multi-Photon Coincidence Counter (CIOp)");
+    dialog.setMinimumWidth(420);
 
-    for (const QString &path : candidatePaths) {
-        if (QFileInfo(path).exists()) {
-            QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(path).absoluteFilePath()));
-            return;
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+    QLabel *info = new QLabel(&dialog);
+    info->setWordWrap(true);
+    info->setText(
+        "MPCC — Multi-Photon Coincidence Counter (CIOp) v3.0.0\n\n"
+        "Herramienta para visualizar y registrar datos de puerto serie.\n"
+        "Distribuido bajo GPLv3."
+    );
+    layout->addWidget(info);
+
+    QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, Qt::Horizontal, &dialog);
+    buttonBox->button(QDialogButtonBox::Close)->setText("Cerrar");
+    QAbstractButton *openReadmeButton = buttonBox->addButton("Abrir README", QDialogButtonBox::ActionRole);
+    layout->addWidget(buttonBox);
+
+    connect(openReadmeButton, &QAbstractButton::clicked, &dialog, [this]() {
+        const QString candidatePaths[] = {
+            QDir::current().filePath("README.md"),
+            QDir(QCoreApplication::applicationDirPath()).filePath("../README.md"),
+            QDir(QCoreApplication::applicationDirPath()).filePath("README.md")
+        };
+
+        for (const QString &path : candidatePaths) {
+            if (QFileInfo(path).exists()) {
+                QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(path).absoluteFilePath()));
+                return;
+            }
         }
-    }
 
-    QMessageBox::warning(this, "Acerca de", "No se encontró README.md en el entorno actual.");
+        QMessageBox::warning(this, "Acerca de", "No se encontró README.md en el entorno actual.");
+    });
+    connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    dialog.exec();
 }
 
 /** ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */

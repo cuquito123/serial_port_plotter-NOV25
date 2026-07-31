@@ -1152,7 +1152,7 @@ void MainWindow::on_actionHow_to_use_triggered()
 {
   HelpWindow *helpDialog = new HelpWindow (this);
   helpDialog->setAttribute(Qt::WA_DeleteOnClose);
-  helpDialog->setWindowTitle ("How to use this application");
+  helpDialog->setWindowTitle ("Cómo usar la aplicación");
   helpDialog->show();
 }
 

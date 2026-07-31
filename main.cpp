@@ -44,7 +44,7 @@ int main(int argc, char *argv[])
     MainWindow w;
     QIcon appIcon(":/serial_port_plotter/icons/serial_port_icon.icns");
     w.setWindowIcon(appIcon);
-    w.setWindowTitle("MPCC — Multi-Photon Coincidence Counter (CIOp) v2.3.0");
+    w.setWindowTitle("MPCC — Multi-Photon Coincidence Counter (CIOp) v3.0.0");
     w.show();
 
     // Entra al bucle principal de eventos.

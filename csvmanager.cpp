@@ -170,7 +170,7 @@ void CsvManager::buildHeaders()
     if (!m_csvStream) return;
 
     // Metadata
-    *m_csvStream << "# Experimento: MPCC — Multi-Photon Coincidence Counter (CIOp) v2.3.0\n";
+    *m_csvStream << "# Experimento: MPCC — Multi-Photon Coincidence Counter (CIOp) v3.0.0\n";
     *m_csvStream << "# Fecha: " << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss") << "\n";
     if (m_experimentDurationMs > 0) {
         qint64 secs = m_experimentDurationMs / 1000;
